@@ -11,7 +11,7 @@ use chrono::{DateTime, Local, Datelike};
 use lazy_static::lazy_static;
 
 lazy_static!(
-    static ref CURRENT_DATETIME: DateTime<Local> = chrono::Local::now();
+    static ref NOW: DateTime<Local> = chrono::Local::now();
 );
 
 // format time as short month name + day + hours + minutes if it is in the current year
@@ -19,12 +19,12 @@ lazy_static!(
 // Otherwise, format as short month name + day + year (omitting the time)
 fn format_time(dt: &DateTime<Local>) -> String {
     let year = dt.year();
-    let current_year = CURRENT_DATETIME.year();
+    let current_year = NOW.year();
 
     if year == current_year {
         format!("{}", dt.format("%b %d %H:%M"))
     } else {
-        let days_since = dt.signed_duration_since(*CURRENT_DATETIME).num_days();
+        let days_since = dt.signed_duration_since(*NOW).num_days();
         if days_since >= -90 {
             format!("{}", dt.format("%b %d %H:%M"))
         } else {
