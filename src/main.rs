@@ -9,9 +9,7 @@ use chrono::{DateTime, Datelike, Local};
 use clap::{Arg, Command};
 use entry::Entry;
 use lazy_static::lazy_static;
-use std::{
-    cmp::Ordering, fs, io, path::Path
-};
+use std::{cmp::Ordering, fs, io, path::Path};
 
 lazy_static! {
     static ref NOW: DateTime<Local> = chrono::Local::now();
@@ -52,6 +50,8 @@ fn format_entry(entry: &Entry) -> String {
 
     if entry.metadata.is_dir() {
         buf.push('/');
+    } else if entry.is_exec() {
+        buf.push('*');
     }
 
     if entry.metadata.is_symlink() {
@@ -77,7 +77,10 @@ fn main() {
     // NOTE I would really like to use OsStr here, but clap won't let me
     // do a .get_many()::<OsStr> nor OsString
     // (Yet it is said that clap supports OsStr arguments...? I dunno)
-    let args = matches.get_many::<String>("path").unwrap().collect::<Vec<_>>();
+    let args = matches
+        .get_many::<String>("path")
+        .unwrap()
+        .collect::<Vec<_>>();
     // dbg!(&args);
 
     let mut exit_code = 0;
@@ -100,7 +103,7 @@ fn main() {
                 }
             }
             match list_dir(&path) {
-                Ok(_) => {},
+                Ok(_) => {}
                 Err(e) => {
                     eprintln!("error: {}: {}", &arg, e);
                     exit_code = 2;
@@ -114,7 +117,7 @@ fn main() {
             file_printed = false;
         } else {
             match list_file(&path) {
-                Ok(_) => {},
+                Ok(_) => {}
                 Err(e) => {
                     eprintln!("error: {}: {}", &arg, e);
                     exit_code = 2;
@@ -146,7 +149,7 @@ fn list_dir(path: &Path) -> Result<(), io::Error> {
 
         let entry = match dir_entry {
             Ok(d) => Entry::from_dir_entry(&d)?,
-            Err(e) => return Err(e)
+            Err(e) => return Err(e),
         };
 
         if entry.is_hidden() {

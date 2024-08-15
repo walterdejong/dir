@@ -10,6 +10,9 @@ use std::fs::{DirEntry, Metadata};
 use std::io;
 use std::path::{Path, PathBuf};
 
+#[cfg(unix)]
+use std::os::unix::fs::MetadataExt;
+
 pub struct Entry {
     pub name: OsString,
     pub metadata: Metadata,
@@ -81,6 +84,18 @@ impl Entry {
             .next()
             .expect("panic: this should not have happened");
         first == '.'
+    }
+
+    #[cfg(unix)]
+    pub fn is_exec(&self) -> bool {
+        let perms = self.metadata.mode() & 0o111;
+        self.metadata.is_file() && (perms != 0)
+    }
+
+    #[cfg(not(unix))]
+    pub fn is_exec(&self) -> bool {
+        let lossy_name = self.name.to_string_lossy();
+        lossy_name.ends_with(".exe") || lossy_name.ends_with(".EXE")
     }
 }
 
