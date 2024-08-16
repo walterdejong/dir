@@ -36,9 +36,23 @@ fn format_time(dt: &DateTime<Local>) -> String {
 
 #[cfg(unix)]
 fn format_permissions(perms: &Permissions) -> String {
-    use std::os::unix::fs::PermissionsExt;
+    use std::{collections::HashMap, os::unix::fs::PermissionsExt, sync::Mutex};
 
     let mode = perms.mode() as u32;
+
+    lazy_static! {
+        static ref CACHE: Mutex<HashMap<u32, String>> = Mutex::new(HashMap::new());
+    }
+    let mut cache = CACHE
+        .lock()
+        .expect("failed to lock mutex on internal cache memory");
+
+    if let Some(mode_string) = cache.get(&mode) {
+        // cache hit
+        // NOTE we have to clone because can not return from local variable hashmap ...
+        // (even though it's a static, yeah)
+        return mode_string.clone();
+    }
 
     // I know these are in crate nix ...
     // but nix is just not being useful to me somehow
@@ -125,6 +139,9 @@ fn format_permissions(perms: &Permissions) -> String {
             '-'
         }
     });
+
+    // add mode string to cache
+    cache.insert(mode, s.clone());
 
     s
 }
