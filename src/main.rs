@@ -9,7 +9,7 @@ use chrono::{DateTime, Datelike, Local};
 use clap::{Arg, Command};
 use entry::Entry;
 use lazy_static::lazy_static;
-use std::{cmp::Ordering, fs, io, path::Path};
+use std::{cmp::Ordering, fs, fs::Permissions, io, path::Path};
 
 lazy_static! {
     static ref NOW: DateTime<Local> = chrono::Local::now();
@@ -34,7 +34,110 @@ fn format_time(dt: &DateTime<Local>) -> String {
     }
 }
 
+#[cfg(unix)]
+fn format_permissions(perms: &Permissions) -> String {
+    use std::os::unix::fs::PermissionsExt;
+
+    let mode = perms.mode() as u32;
+
+    // I know these are in crate nix ...
+    // but nix is just not being useful to me somehow
+
+    const _S_IFMT: u32 = 0o170000;
+
+    const S_IFSOCK: u32 = 0o140000;
+    const S_IFLNK: u32 = 0o120000;
+    const S_IFREG: u32 = 0o100000;
+    const S_IFBLK: u32 = 0o060000;
+    const S_IFDIR: u32 = 0o040000;
+    const S_IFCHR: u32 = 0o020000;
+    const S_IFIFO: u32 = 0o010000;
+
+    const S_ISUID: u32 = 0o4000;
+    const S_ISGID: u32 = 0o2000;
+    const S_ISVTX: u32 = 0o1000;
+
+    const _S_IRWXU: u32 = 0o0700;
+    const S_IRUSR: u32 = 0o0400;
+    const S_IWUSR: u32 = 0o0200;
+    const S_IXUSR: u32 = 0o0100;
+
+    const _S_IRWXG: u32 = 0o0070;
+    const S_IRGRP: u32 = 0o0040;
+    const S_IWGRP: u32 = 0o0020;
+    const S_IXGRP: u32 = 0o0010;
+
+    const _S_IRWXO: u32 = 0o0007;
+    const S_IROTH: u32 = 0o0004;
+    const S_IWOTH: u32 = 0o0002;
+    const S_IXOTH: u32 = 0o0001;
+
+    const FILETYPE_MASK: [u32; 7] = [
+        S_IFSOCK, S_IFLNK, S_IFREG, S_IFBLK, S_IFDIR, S_IFCHR, S_IFIFO,
+    ];
+    const FILETYPE_CHAR: [char; 7] = ['s', 'l', '-', 'b', 'd', 'c', 'p'];
+
+    let mut s = String::with_capacity(10);
+
+    // filetype bit
+    for (idx, filetype_mask) in FILETYPE_MASK.into_iter().enumerate() {
+        if mode & filetype_mask == filetype_mask {
+            s.push(FILETYPE_CHAR[idx]);
+            break;
+        }
+    }
+
+    // rwx user (also does setuid bit)
+    s.push(if mode & S_IRUSR == S_IRUSR { 'r' } else { '-' });
+    s.push(if mode & S_IWUSR == S_IWUSR { 'w' } else { '-' });
+    s.push(if mode & S_ISUID == S_ISUID {
+        's'
+    } else {
+        if mode & S_IXUSR == S_IXUSR {
+            'x'
+        } else {
+            '-'
+        }
+    });
+
+    // rwx group (also does setgid bit)
+    s.push(if mode & S_IRGRP == S_IRGRP { 'r' } else { '-' });
+    s.push(if mode & S_IWGRP == S_IWGRP { 'w' } else { '-' });
+    s.push(if mode & S_ISGID == S_ISGID {
+        's'
+    } else {
+        if mode & S_IXGRP == S_IXGRP {
+            'x'
+        } else {
+            '-'
+        }
+    });
+
+    // rwx others (also does sticky bit)
+    s.push(if mode & S_IROTH == S_IROTH { 'r' } else { '-' });
+    s.push(if mode & S_IWOTH == S_IWOTH { 'w' } else { '-' });
+    s.push(if mode & S_ISVTX == S_ISVTX {
+        't'
+    } else {
+        if mode & S_IXOTH == S_IXOTH {
+            'x'
+        } else {
+            '-'
+        }
+    });
+
+    s
+}
+
 fn format_entry(entry: &Entry) -> String {
+    #[cfg(unix)]
+    let perms_str = format_permissions(&entry.metadata.permissions());
+
+    #[cfg(not(unix))]
+    {
+        // permissions not implemented for non-unix platform
+    }
+
     let time_str = format_time(&entry.mtime());
 
     let size_str;
@@ -46,6 +149,12 @@ fn format_entry(entry: &Entry) -> String {
 
     let display_name = entry.name.to_string_lossy();
 
+    #[cfg(unix)]
+    let mut buf = format!(
+        "{}  {}  {}  {}",
+        &time_str, &perms_str, &size_str, &display_name
+    );
+    #[cfg(not(unix))]
     let mut buf = format!("{}  {}  {}", &time_str, &size_str, &display_name);
 
     if entry.metadata.is_dir() {
