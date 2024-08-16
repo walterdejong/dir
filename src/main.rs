@@ -34,6 +34,31 @@ fn format_time(dt: &DateTime<Local>) -> String {
     }
 }
 
+fn format_size(size: u64) -> String {
+    if size < 900 {
+        return format!("{}", size);
+    }
+
+    const UNITS: [char; 8] = ['k', 'M', 'G', 'T', 'P', 'E', 'Z', 'Y'];
+
+    const MULTIPLIER: f32 = 1000.0;
+    let mut f = size as f32 / MULTIPLIER;
+
+    let mut unit = UNITS[0];
+    for unit_idx in UNITS.iter() {
+        unit = *unit_idx;
+
+        if f < 900.0 {
+            break;
+        }
+
+        f /= MULTIPLIER;
+    }
+
+    let s = format!("{:.1} {}B", f, unit);
+    s
+}
+
 #[cfg(unix)]
 fn format_permissions(perms: &Permissions) -> String {
     use std::{collections::HashMap, os::unix::fs::PermissionsExt, sync::Mutex};
@@ -159,20 +184,20 @@ fn format_entry(entry: &Entry) -> String {
 
     let size_str;
     if entry.metadata.is_dir() {
-        size_str = format!("{:^16}", "<DIR>");
+        size_str = format!("{:^8}", "<DIR>");
     } else {
-        size_str = format!("{:>16}", entry.metadata.len());
+        size_str = format_size(entry.metadata.len());
     }
 
     let display_name = entry.name.to_string_lossy();
 
     #[cfg(unix)]
     let mut buf = format!(
-        "{}  {}  {}  {}",
+        "{}  {}  {:>8}  {}",
         &time_str, &perms_str, &size_str, &display_name
     );
     #[cfg(not(unix))]
-    let mut buf = format!("{}  {}  {}", &time_str, &size_str, &display_name);
+    let mut buf = format!("{}  {:>8}  {}", &time_str, &size_str, &display_name);
 
     if entry.metadata.is_dir() {
         buf.push('/');
