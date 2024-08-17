@@ -9,7 +9,7 @@ use chrono::{DateTime, Datelike, Local};
 use clap::{Arg, Command};
 use entry::Entry;
 use lazy_static::lazy_static;
-use std::{cmp::Ordering, fs, io, path::Path};
+use std::{cmp::Ordering, fs, io, path::Path, ffi::OsStr};
 #[cfg(unix)]
 use std::fs::Permissions;
 
@@ -173,6 +173,67 @@ fn format_permissions(perms: &Permissions) -> String {
     s
 }
 
+fn colorize(entry: &Entry) -> Option<String> {
+    const RED: u32 = 31;
+    const GREEN: u32 = 32;
+    const YELLOW: u32 = 33;
+    const BLUE: u32 = 34;
+    const MAGENTA: u32 = 35;
+    const CYAN: u32 = 36;
+
+    if entry.metadata.is_symlink() {
+        return Some(format!("\x1b[{};1m", CYAN));
+    }
+    if entry.metadata.is_dir() {
+        return Some(format!("\x1b[{};1m", YELLOW));
+    }
+
+    if entry.metadata.is_file() {
+        if entry.is_exec() {
+            return Some(format!("\x1b[{};1m", GREEN));
+        }
+
+        // by filename extension
+
+        if let Some(ext) = get_filename_ext(&entry.name) {
+            if is_media_file(&ext) {
+                return Some(format!("\x1b[{};1m", MAGENTA));
+            }
+
+            if is_compressed_file(&ext) {
+                return Some(format!("\x1b[{};1m", RED));
+            }
+        }
+    }
+
+    // TODO if unix filetype ...
+
+    None
+}
+
+fn get_filename_ext(filename: &OsStr) -> Option<String> {
+    let lossy_name = filename.to_string_lossy();
+    let parts = lossy_name.split(".").collect::<Vec<&str>>();
+    if parts.len() <= 1 {
+        None
+    } else {
+        let ext = parts.last().unwrap().to_string();
+        Some(ext)
+    }
+}
+
+fn is_media_file(ext: &str) -> bool {
+    // TODO would be better with a hashmap
+    const MEDIA_FILES: &'static [&'static str] = &["mp3", "ogg", "jpg", "png", "JPG", "jpeg", "bmp", "gif", "xcf", "tga", "xpm", "mpg", "mpeg", "mp4", "avi", "mov"];
+    MEDIA_FILES.contains(&ext)
+}
+
+fn is_compressed_file(ext: &str) -> bool {
+    // TODO would be better with a hashmap
+    const COMPRESSED_FILES: &'static [&'static str] = &["gz", "xz", "tar", "bz2", "zip", "ZIP", "iso", "dmg", "deb", "rpm", "Z", "lzh", "arj", "rar", "jar"];
+    COMPRESSED_FILES.contains(&ext)
+}
+
 fn format_entry(entry: &Entry) -> String {
     #[cfg(unix)]
     let perms_str = format_permissions(&entry.metadata.permissions());
@@ -191,7 +252,13 @@ fn format_entry(entry: &Entry) -> String {
         size_str = format_size(entry.metadata.len());
     }
 
-    let display_name = entry.name.to_string_lossy();
+    let display_name = if let Some(color_str) = colorize(&entry) {
+        // format with colors
+        const END_COLOR: &'static str = "\x1b[0m";
+        format!("{}{}{}", &color_str, entry.name.to_string_lossy(), END_COLOR)
+    } else {
+        entry.name.to_string_lossy().to_string()
+    };
 
     #[cfg(unix)]
     let mut buf = format!(
