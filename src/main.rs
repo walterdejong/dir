@@ -9,7 +9,9 @@ use chrono::{DateTime, Datelike, Local};
 use clap::{Arg, Command};
 use entry::Entry;
 use lazy_static::lazy_static;
-use std::{cmp::Ordering, fs, fs::Permissions, io, path::Path};
+use std::{cmp::Ordering, fs, io, path::Path};
+#[cfg(unix)]
+use std::fs::Permissions;
 
 lazy_static! {
     static ref NOW: DateTime<Local> = chrono::Local::now();
