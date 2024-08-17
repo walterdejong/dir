@@ -211,7 +211,7 @@ fn colorize(entry: &Entry) -> Option<String> {
 
 // Returns color code for file extension, if the file extension is known
 fn color_by_ext(filename: &OsStr) -> Option<u32> {
-    let ext = get_filename_ext(filename)?;
+    let ext = get_filename_ext(filename)?.to_lowercase();
     let colormap = COLOR_BY_EXT
         .lock()
         .expect("failed to lock mutex on internal hashmap");
@@ -294,8 +294,8 @@ fn init_colors_by_ext() {
         .expect("failed to lock mutex on internal hashmap");
 
     const MEDIA_FILES: &'static [&'static str] = &[
-        "mp3", "ogg", "jpg", "png", "JPG", "jpeg", "bmp", "gif", "xcf", "tga", "xpm", "mpg",
-        "mpeg", "mp4", "avi", "mov",
+        "mp3", "ogg", "jpg", "png", "jpeg", "bmp", "gif", "xcf", "tga", "xpm", "mpg", "mpeg",
+        "mp4", "avi", "mov",
     ];
     const MAGENTA: u32 = 35;
 
@@ -304,8 +304,8 @@ fn init_colors_by_ext() {
     }
 
     const COMPRESSED_FILES: &'static [&'static str] = &[
-        "gz", "xz", "tar", "bz2", "zip", "ZIP", "iso", "dmg", "deb", "rpm", "Z", "lzh", "arj",
-        "rar", "jar",
+        "gz", "xz", "tar", "bz2", "zip", "iso", "dmg", "deb", "rpm", "Z", "lzh", "arj", "rar",
+        "jar",
     ];
     const RED: u32 = 31;
 
