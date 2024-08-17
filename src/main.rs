@@ -9,12 +9,13 @@ use chrono::{DateTime, Datelike, Local};
 use clap::{Arg, Command};
 use entry::Entry;
 use lazy_static::lazy_static;
-use std::{cmp::Ordering, fs, io, path::Path, ffi::OsStr};
 #[cfg(unix)]
 use std::fs::Permissions;
+use std::{cmp::Ordering, collections::HashMap, ffi::OsStr, fs, io, path::Path, sync::Mutex};
 
 lazy_static! {
     static ref NOW: DateTime<Local> = chrono::Local::now();
+    static ref COLOR_BY_EXT: Mutex<HashMap<String, u32>> = Mutex::new(HashMap::new());
 }
 
 // format time as short month name + day + hours + minutes if it is in the current year
@@ -61,9 +62,10 @@ fn format_size(size: u64) -> String {
     s
 }
 
+#[allow(unused)]
 #[cfg(unix)]
 fn format_permissions(perms: &Permissions) -> String {
-    use std::{collections::HashMap, os::unix::fs::PermissionsExt, sync::Mutex};
+    use std::os::unix::fs::PermissionsExt;
 
     let mode = perms.mode() as u32;
 
@@ -84,7 +86,7 @@ fn format_permissions(perms: &Permissions) -> String {
     // I know these are in crate nix ...
     // but nix is just not being useful to me somehow
 
-    const _S_IFMT: u32 = 0o170000;
+    const S_IFMT: u32 = 0o170000;
 
     const S_IFSOCK: u32 = 0o140000;
     const S_IFLNK: u32 = 0o120000;
@@ -98,17 +100,17 @@ fn format_permissions(perms: &Permissions) -> String {
     const S_ISGID: u32 = 0o2000;
     const S_ISVTX: u32 = 0o1000;
 
-    const _S_IRWXU: u32 = 0o0700;
+    const S_IRWXU: u32 = 0o0700;
     const S_IRUSR: u32 = 0o0400;
     const S_IWUSR: u32 = 0o0200;
     const S_IXUSR: u32 = 0o0100;
 
-    const _S_IRWXG: u32 = 0o0070;
+    const S_IRWXG: u32 = 0o0070;
     const S_IRGRP: u32 = 0o0040;
     const S_IWGRP: u32 = 0o0020;
     const S_IXGRP: u32 = 0o0010;
 
-    const _S_IRWXO: u32 = 0o0007;
+    const S_IRWXO: u32 = 0o0007;
     const S_IROTH: u32 = 0o0004;
     const S_IWOTH: u32 = 0o0002;
     const S_IXOTH: u32 = 0o0001;
@@ -173,6 +175,7 @@ fn format_permissions(perms: &Permissions) -> String {
     s
 }
 
+#[allow(unused)]
 fn colorize(entry: &Entry) -> Option<String> {
     const RED: u32 = 31;
     const GREEN: u32 = 32;
@@ -194,21 +197,24 @@ fn colorize(entry: &Entry) -> Option<String> {
         }
 
         // by filename extension
-
-        if let Some(ext) = get_filename_ext(&entry.name) {
-            if is_media_file(&ext) {
-                return Some(format!("\x1b[{};1m", MAGENTA));
-            }
-
-            if is_compressed_file(&ext) {
-                return Some(format!("\x1b[{};1m", RED));
-            }
+        if let Some(color_code) = color_by_ext(&entry.name) {
+            return Some(format!("\x1b[{};1m", color_code));
         }
     }
 
     // TODO if unix filetype ...
 
     None
+}
+
+// Returns color code for file extension, if the file extension is known
+fn color_by_ext(filename: &OsStr) -> Option<u32> {
+    let ext = get_filename_ext(filename)?;
+    let colormap = COLOR_BY_EXT
+        .lock()
+        .expect("failed to lock mutex on internal hashmap");
+    let color = colormap.get(&ext)?;
+    Some(*color)
 }
 
 fn get_filename_ext(filename: &OsStr) -> Option<String> {
@@ -220,18 +226,6 @@ fn get_filename_ext(filename: &OsStr) -> Option<String> {
         let ext = parts.last().unwrap().to_string();
         Some(ext)
     }
-}
-
-fn is_media_file(ext: &str) -> bool {
-    // TODO would be better with a hashmap
-    const MEDIA_FILES: &'static [&'static str] = &["mp3", "ogg", "jpg", "png", "JPG", "jpeg", "bmp", "gif", "xcf", "tga", "xpm", "mpg", "mpeg", "mp4", "avi", "mov"];
-    MEDIA_FILES.contains(&ext)
-}
-
-fn is_compressed_file(ext: &str) -> bool {
-    // TODO would be better with a hashmap
-    const COMPRESSED_FILES: &'static [&'static str] = &["gz", "xz", "tar", "bz2", "zip", "ZIP", "iso", "dmg", "deb", "rpm", "Z", "lzh", "arj", "rar", "jar"];
-    COMPRESSED_FILES.contains(&ext)
 }
 
 fn format_entry(entry: &Entry) -> String {
@@ -255,7 +249,12 @@ fn format_entry(entry: &Entry) -> String {
     let display_name = if let Some(color_str) = colorize(&entry) {
         // format with colors
         const END_COLOR: &'static str = "\x1b[0m";
-        format!("{}{}{}", &color_str, entry.name.to_string_lossy(), END_COLOR)
+        format!(
+            "{}{}{}",
+            &color_str,
+            entry.name.to_string_lossy(),
+            END_COLOR
+        )
     } else {
         entry.name.to_string_lossy().to_string()
     };
@@ -285,6 +284,34 @@ fn format_entry(entry: &Entry) -> String {
     buf
 }
 
+fn init_colors_by_ext() {
+    // put file extensions with their color code into a hashmap
+
+    let mut colormap = COLOR_BY_EXT
+        .lock()
+        .expect("failed to lock mutex on internal hashmap");
+
+    const MEDIA_FILES: &'static [&'static str] = &[
+        "mp3", "ogg", "jpg", "png", "JPG", "jpeg", "bmp", "gif", "xcf", "tga", "xpm", "mpg",
+        "mpeg", "mp4", "avi", "mov",
+    ];
+    const MAGENTA: u32 = 35;
+
+    for ext in MEDIA_FILES {
+        colormap.insert(ext.to_string(), MAGENTA);
+    }
+
+    const COMPRESSED_FILES: &'static [&'static str] = &[
+        "gz", "xz", "tar", "bz2", "zip", "ZIP", "iso", "dmg", "deb", "rpm", "Z", "lzh", "arj",
+        "rar", "jar",
+    ];
+    const RED: u32 = 31;
+
+    for ext in COMPRESSED_FILES {
+        colormap.insert(ext.to_string(), RED);
+    }
+}
+
 fn main() {
     let matches = Command::new("dir")
         .version("0.1.0")
@@ -302,6 +329,8 @@ fn main() {
         .unwrap()
         .collect::<Vec<_>>();
     // dbg!(&args);
+
+    init_colors_by_ext();
 
     let mut exit_code = 0;
 
