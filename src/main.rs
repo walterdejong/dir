@@ -15,6 +15,8 @@ use std::{cmp::Ordering, collections::HashMap, ffi::OsStr, fs, io, path::Path, s
 
 lazy_static! {
     static ref NOW: DateTime<Local> = chrono::Local::now();
+
+    // hashmap: file extension -> color code
     static ref COLOR_BY_EXT: Mutex<HashMap<String, u32>> = Mutex::new(HashMap::new());
 }
 
