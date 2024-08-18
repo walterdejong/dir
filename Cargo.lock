@@ -153,6 +153,7 @@ dependencies = [
  "chrono",
  "clap",
  "lazy_static",
+ "once_cell",
 ]
 
 [[package]]

@@ -12,10 +12,9 @@ use lazy_static::lazy_static;
 #[cfg(unix)]
 use std::fs::Permissions;
 use std::{cmp::Ordering, collections::HashMap, ffi::OsStr, fs, io, path::Path, sync::Mutex};
+use once_cell::sync::OnceCell;
 
 lazy_static! {
-    static ref NOW: DateTime<Local> = chrono::Local::now();
-
     // hashmap: file extension -> color code
     static ref COLOR_BY_EXT: Mutex<HashMap<String, u32>> = Mutex::new(HashMap::new());
 }
@@ -25,12 +24,15 @@ lazy_static! {
 // Otherwise, format as short month name + day + year (omitting the time)
 fn format_time(dt: &DateTime<Local>) -> String {
     let year = dt.year();
-    let current_year = NOW.year();
+
+    static NOW: OnceCell<DateTime<Local>> = OnceCell::new();
+    let now = NOW.get_or_init(|| chrono::Local::now());
+    let current_year = now.year();
 
     if year == current_year {
         format!("{}", dt.format("%b %d %H:%M"))
     } else {
-        let days_since = dt.signed_duration_since(*NOW).num_days();
+        let days_since = dt.signed_duration_since(now).num_days();
         if days_since >= -90 {
             format!("{}", dt.format("%b %d %H:%M"))
         } else {
