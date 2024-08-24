@@ -535,15 +535,12 @@ fn load_config_data(data: &serde_json::Value, config_file: &Path) {
 fn load_config_extension(extension_value: &serde_json::Value, config_file: &Path) -> u32 {
     let mut errors = 0u32;
 
-    dbg!(&extension_value);
     if let Some(extensions) = extension_value.as_object() {
         let mut color_map = COLOR_BY_EXT
             .lock()
             .expect("error: failed to lock internal hashmap");
         for (key, value) in extensions.iter() {
-            dbg!(&key);
             if let Some(svalue) = value.as_str() {
-                dbg!(&svalue);
                 if let Some(color) = color_by_name(&svalue.to_lowercase()) {
                     color_map.insert(key.to_lowercase(), color);
                 } else {
@@ -562,7 +559,6 @@ fn load_config_extension(extension_value: &serde_json::Value, config_file: &Path
                 errors += 1;
             }
         }
-        dbg!(&color_map);
     } else {
         eprintln!(
             "{}: 'extension' should be a map: {{\"ext\": \"color\"}}",
@@ -576,16 +572,13 @@ fn load_config_extension(extension_value: &serde_json::Value, config_file: &Path
 fn load_config_filetype(filetype_value: &serde_json::Value, config_file: &Path) -> u32 {
     let mut errors = 0u32;
 
-    dbg!(&filetype_value);
     if let Some(filetype) = filetype_value.as_object() {
         let mut color_map = COLOR_BY_FILETYPE
             .lock()
             .expect("error: failed to lock internal lookup table");
         for (key, value) in filetype.iter() {
-            dbg!(&key);
             if let Some(ftype) = filetype_by_name(&key.to_lowercase()) {
                 if let Some(svalue) = value.as_str() {
-                    dbg!(&svalue);
                     if let Some(color) = color_by_name(&svalue.to_lowercase()) {
                         color_map[ftype] = color;
                     } else {
@@ -612,7 +605,6 @@ fn load_config_filetype(filetype_value: &serde_json::Value, config_file: &Path) 
                 errors += 1;
             }
         }
-        dbg!(&color_map);
     } else {
         eprintln!(
             "{}: 'filetype' should be a map: {{\"ftype\": \"color\"}}",
@@ -626,16 +618,13 @@ fn load_config_filetype(filetype_value: &serde_json::Value, config_file: &Path) 
 fn load_config_filemode(mode_value: &serde_json::Value, config_file: &Path) -> u32 {
     let mut errors = 0u32;
 
-    dbg!(&mode_value);
     if let Some(mode) = mode_value.as_object() {
         let mut color_map = COLOR_BY_MODE
             .lock()
             .expect("error: failed to lock internal lookup table");
         for (key, value) in mode.iter() {
-            dbg!(&key);
             if let Some(fmode) = filemode_by_name(&key.to_lowercase()) {
                 if let Some(svalue) = value.as_str() {
-                    dbg!(&svalue);
                     if let Some(color) = color_by_name(&svalue.to_lowercase()) {
                         color_map[fmode] = color;
                     } else {
@@ -662,7 +651,6 @@ fn load_config_filemode(mode_value: &serde_json::Value, config_file: &Path) -> u
                 errors += 1;
             }
         }
-        dbg!(&color_map);
     } else {
         eprintln!(
             "{}: 'mode' should be a map: {{\"fmode\": \"color\"}}",
