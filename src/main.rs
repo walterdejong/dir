@@ -247,10 +247,20 @@ fn metadata_filetype(metadata: &Metadata) -> usize {
     FT_FILE
 }
 
+fn format_color(color: u32) -> Option<String> {
+    if color == 0 {
+        None
+    } else {
+        if CONFIG_BOLD.get() && color < 40 {
+            Some(format!("\x1b[{};1m", color))
+        } else {
+            Some(format!("\x1b[{}m", color))
+        }
+    }
+}
+
 fn colorize(entry: &Entry) -> Option<String> {
     let filetype = metadata_filetype(&entry.metadata);
-
-    // TODO what about "bright"" setting?
 
     if filetype == FT_DIR {
         #[cfg(unix)]
@@ -259,14 +269,14 @@ fn colorize(entry: &Entry) -> Option<String> {
                 .lock()
                 .expect("error: failed to lock interal lookup table");
             let color = colormap[FM_STICKY];
-            return Some(format!("\x1b[{}m", color));
+            return format_color(color);
         }
 
         let colormap = COLOR_BY_FILETYPE
             .lock()
             .expect("error: failed to lock interal lookup table");
         let color = colormap[FT_DIR];
-        return Some(format!("\x1b[{};1m", color));
+        return format_color(color);
     }
 
     if filetype == FT_FILE {
@@ -276,7 +286,7 @@ fn colorize(entry: &Entry) -> Option<String> {
                 .lock()
                 .expect("error: failed to lock interal lookup table");
             let color = colormap[FM_SUID];
-            return Some(format!("\x1b[{}m", color));
+            return format_color(color);
         }
 
         #[cfg(unix)]
@@ -285,7 +295,7 @@ fn colorize(entry: &Entry) -> Option<String> {
                 .lock()
                 .expect("error: failed to lock interal lookup table");
             let color = colormap[FM_SGID];
-            return Some(format!("\x1b[{}m", color));
+            return format_color(color);
         }
 
         #[cfg(unix)]
@@ -294,7 +304,7 @@ fn colorize(entry: &Entry) -> Option<String> {
                 .lock()
                 .expect("error: failed to lock interal lookup table");
             let color = colormap[FM_STICKY];
-            return Some(format!("\x1b[{}m", color));
+            return format_color(color);
         }
 
         if entry.is_exec() {
@@ -302,12 +312,12 @@ fn colorize(entry: &Entry) -> Option<String> {
                 .lock()
                 .expect("error: failed to lock interal lookup table");
             let color = colormap[FM_EXEC];
-            return Some(format!("\x1b[{};1m", color));
+            return format_color(color);
         }
 
         // by filename extension
         if let Some(color) = color_by_ext(&entry.name) {
-            return Some(format!("\x1b[{};1m", color));
+            return format_color(color);
         }
     }
 
@@ -315,11 +325,7 @@ fn colorize(entry: &Entry) -> Option<String> {
         .lock()
         .expect("error: failed to lock interal lookup table");
     let color = colormap[filetype];
-    if color != 0 {
-        Some(format!("\x1b[{}m", color))
-    } else {
-        None
-    }
+    format_color(color)
 }
 
 // Returns color code for file extension, if the file extension is known
