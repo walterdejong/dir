@@ -231,17 +231,17 @@ fn unix_filetype(perms: &Permissions) -> usize {
     if ftype & entry::S_IFLNK == entry::S_IFLNK {
         return FT_SYMLINK;
     }
+    if ftype & entry::S_IFBLK == entry::S_IFBLK {
+        return FT_BLOCKDEV;
+    }
+    if ftype & entry::S_IFCHR == entry::S_IFCHR {
+        return FT_CHARDEV;
+    }
     if ftype & entry::S_IFIFO == entry::S_IFIFO {
         return FT_FIFO;
     }
     if ftype & entry::S_IFSOCK == entry::S_IFSOCK {
         return FT_SOCK;
-    }
-    if ftype & entry::S_IFCHR == entry::S_IFCHR {
-        return FT_CHARDEV;
-    }
-    if ftype & entry::S_IFBLK == entry::S_IFBLK {
-        return FT_BLOCKDEV;
     }
 
     // we should never get here, but hey
