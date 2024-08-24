@@ -122,20 +122,6 @@ fn format_permissions(perms: &Permissions) -> String {
     // I know these are in crate nix ...
     // but nix is just not being useful to me somehow
 
-    const S_IFMT: u32 = 0o170000;
-
-    const S_IFSOCK: u32 = 0o140000;
-    const S_IFLNK: u32 = 0o120000;
-    const S_IFREG: u32 = 0o100000;
-    const S_IFBLK: u32 = 0o060000;
-    const S_IFDIR: u32 = 0o040000;
-    const S_IFCHR: u32 = 0o020000;
-    const S_IFIFO: u32 = 0o010000;
-
-    const S_ISUID: u32 = 0o4000;
-    const S_ISGID: u32 = 0o2000;
-    const S_ISVTX: u32 = 0o1000;
-
     const S_IRWXU: u32 = 0o0700;
     const S_IRUSR: u32 = 0o0400;
     const S_IWUSR: u32 = 0o0200;
@@ -152,15 +138,21 @@ fn format_permissions(perms: &Permissions) -> String {
     const S_IXOTH: u32 = 0o0001;
 
     const FILETYPE_MASK: [u32; 7] = [
-        S_IFSOCK, S_IFLNK, S_IFREG, S_IFBLK, S_IFDIR, S_IFCHR, S_IFIFO,
+        entry::S_IFREG,
+        entry::S_IFDIR,
+        entry::S_IFLNK,
+        entry::S_IFBLK,
+        entry::S_IFCHR,
+        entry::S_IFIFO,
+        entry::S_IFSOCK,
     ];
-    const FILETYPE_CHAR: [char; 7] = ['s', 'l', '-', 'b', 'd', 'c', 'p'];
+    const FILETYPE_CHAR: [char; 7] = ['-', 'd', 'l', 'b', 'c', 'p', 's'];
 
     let mut s = String::with_capacity(10);
 
     // filetype bit
     for (idx, filetype_mask) in FILETYPE_MASK.into_iter().enumerate() {
-        if mode & filetype_mask == filetype_mask {
+        if mode & entry::S_IFMT == filetype_mask {
             s.push(FILETYPE_CHAR[idx]);
             break;
         }
@@ -170,13 +162,13 @@ fn format_permissions(perms: &Permissions) -> String {
     s.push(if mode & S_IRUSR == S_IRUSR { 'r' } else { '-' });
     s.push(if mode & S_IWUSR == S_IWUSR { 'w' } else { '-' });
     s.push(if mode & S_IXUSR == S_IXUSR {
-        if mode & S_ISUID == S_ISUID {
+        if mode & entry::S_ISUID == entry::S_ISUID {
             's'
         } else {
             'x'
         }
     } else {
-        if mode & S_ISUID == S_ISUID {
+        if mode & entry::S_ISUID == entry::S_ISUID {
             'S'
         } else {
             '-'
@@ -187,13 +179,13 @@ fn format_permissions(perms: &Permissions) -> String {
     s.push(if mode & S_IRGRP == S_IRGRP { 'r' } else { '-' });
     s.push(if mode & S_IWGRP == S_IWGRP { 'w' } else { '-' });
     s.push(if mode & S_IXGRP == S_IXGRP {
-        if mode & S_ISGID == S_ISGID {
+        if mode & entry::S_ISGID == entry::S_ISGID {
             's'
         } else {
             'x'
         }
     } else {
-        if mode & S_ISGID == S_ISGID {
+        if mode & entry::S_ISGID == entry::S_ISGID {
             'S'
         } else {
             '-'
@@ -204,13 +196,13 @@ fn format_permissions(perms: &Permissions) -> String {
     s.push(if mode & S_IROTH == S_IROTH { 'r' } else { '-' });
     s.push(if mode & S_IWOTH == S_IWOTH { 'w' } else { '-' });
     s.push(if mode & S_IXOTH == S_IXOTH {
-        if mode & S_ISVTX == S_ISVTX {
+        if mode & entry::S_ISVTX == entry::S_ISVTX {
             't'
         } else {
             'x'
         }
     } else {
-        if mode & S_ISVTX == S_ISVTX {
+        if mode & entry::S_ISVTX == entry::S_ISVTX {
             'T'
         } else {
             '-'
