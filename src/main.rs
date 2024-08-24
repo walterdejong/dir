@@ -119,6 +119,20 @@ fn format_permissions(perms: &Permissions) -> String {
         return mode_string.clone();
     }
 
+    let mut s = String::with_capacity(10);
+
+    // filetype bit
+    s.push(match mode & entry::S_IFMT {
+        entry::S_IFREG => '-',
+        entry::S_IFDIR => 'd',
+        entry::S_IFLNK => 'l',
+        entry::S_IFBLK => 'b',
+        entry::S_IFCHR => 'c',
+        entry::S_IFIFO => 'p',
+        entry::S_IFSOCK => 's',
+        _ => '-',
+    });
+
     // I know these are in crate nix ...
     // but nix is just not being useful to me somehow
 
@@ -136,20 +150,6 @@ fn format_permissions(perms: &Permissions) -> String {
     const S_IROTH: u32 = 0o0004;
     const S_IWOTH: u32 = 0o0002;
     const S_IXOTH: u32 = 0o0001;
-
-    let mut s = String::with_capacity(10);
-
-    // filetype bit
-    s.push(match mode & entry::S_IFMT {
-        entry::S_IFREG => '-',
-        entry::S_IFDIR => 'd',
-        entry::S_IFLNK => 'l',
-        entry::S_IFBLK => 'b',
-        entry::S_IFCHR => 'c',
-        entry::S_IFIFO => 'p',
-        entry::S_IFSOCK => 's',
-        _ => '-',
-    });
 
     // rwx user (also does setuid bit)
     s.push(if mode & S_IRUSR == S_IRUSR { 'r' } else { '-' });
