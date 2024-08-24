@@ -137,26 +137,19 @@ fn format_permissions(perms: &Permissions) -> String {
     const S_IWOTH: u32 = 0o0002;
     const S_IXOTH: u32 = 0o0001;
 
-    const FILETYPE_MASK: [u32; 7] = [
-        entry::S_IFREG,
-        entry::S_IFDIR,
-        entry::S_IFLNK,
-        entry::S_IFBLK,
-        entry::S_IFCHR,
-        entry::S_IFIFO,
-        entry::S_IFSOCK,
-    ];
-    const FILETYPE_CHAR: [char; 7] = ['-', 'd', 'l', 'b', 'c', 'p', 's'];
-
     let mut s = String::with_capacity(10);
 
     // filetype bit
-    for (idx, filetype_mask) in FILETYPE_MASK.into_iter().enumerate() {
-        if mode & entry::S_IFMT == filetype_mask {
-            s.push(FILETYPE_CHAR[idx]);
-            break;
-        }
-    }
+    s.push(match mode & entry::S_IFMT {
+        entry::S_IFREG => '-',
+        entry::S_IFDIR => 'd',
+        entry::S_IFLNK => 'l',
+        entry::S_IFBLK => 'b',
+        entry::S_IFCHR => 'c',
+        entry::S_IFIFO => 'p',
+        entry::S_IFSOCK => 's',
+        _ => '-',
+    });
 
     // rwx user (also does setuid bit)
     s.push(if mode & S_IRUSR == S_IRUSR { 'r' } else { '-' });
@@ -221,31 +214,16 @@ fn unix_filetype(perms: &Permissions) -> usize {
     use std::os::unix::fs::PermissionsExt;
 
     let mode = perms.mode() as u32;
-    let ftype = mode & entry::S_IFMT;
-    if ftype & entry::S_IFREG == entry::S_IFREG {
-        return FT_FILE;
+    match mode & entry::S_IFMT {
+        entry::S_IFREG => FT_FILE,
+        entry::S_IFDIR => FT_DIR,
+        entry::S_IFLNK => FT_SYMLINK,
+        entry::S_IFBLK => FT_BLOCKDEV,
+        entry::S_IFCHR => FT_CHARDEV,
+        entry::S_IFIFO => FT_FIFO,
+        entry::S_IFSOCK => FT_SOCK,
+        _ => FT_FILE,
     }
-    if ftype & entry::S_IFDIR == entry::S_IFDIR {
-        return FT_DIR;
-    }
-    if ftype & entry::S_IFLNK == entry::S_IFLNK {
-        return FT_SYMLINK;
-    }
-    if ftype & entry::S_IFBLK == entry::S_IFBLK {
-        return FT_BLOCKDEV;
-    }
-    if ftype & entry::S_IFCHR == entry::S_IFCHR {
-        return FT_CHARDEV;
-    }
-    if ftype & entry::S_IFIFO == entry::S_IFIFO {
-        return FT_FIFO;
-    }
-    if ftype & entry::S_IFSOCK == entry::S_IFSOCK {
-        return FT_SOCK;
-    }
-
-    // we should never get here, but hey
-    FT_FILE
 }
 
 // Returns FT_xxx constant for entry filetype
