@@ -5,23 +5,28 @@
 
 pub mod entry;
 
-use anyhow::Result;
 use chrono::{DateTime, Datelike, Local};
 use clap::{Arg, Command};
 use entry::Entry;
 use lazy_static::lazy_static;
 use once_cell::sync::OnceCell;
 #[cfg(unix)]
-use std::fs::Permissions;
 use std::{
+    cell::Cell,
     cmp::Ordering,
     collections::HashMap,
     ffi::OsStr,
-    fs::{self, File},
+    fs::{self, File, Metadata, Permissions},
     io::{self, BufReader},
     path::{Path, PathBuf},
     sync::Mutex,
 };
+
+thread_local! {
+    static CONFIG_BOLD: Cell<bool> = Cell::new(true);
+    static CONFIG_CLASSIFY: Cell<bool> = Cell::new(true);
+    static CONFIG_WIDE: Cell<bool> = Cell::new(false);
+}
 
 lazy_static! {
     // hashmap: file extension -> color code
@@ -210,10 +215,10 @@ fn format_permissions(perms: &Permissions) -> String {
 
 // Returns FT_xxx constant for entry filetype
 #[cfg(unix)]
-fn unix_filetype(perms: &Permissions) -> usize {
+fn metadata_filetype(metadata: &Metadata) -> usize {
     use std::os::unix::fs::PermissionsExt;
 
-    let mode = perms.mode() as u32;
+    let mode = metadata.permissions().mode() as u32;
     match mode & entry::S_IFMT {
         entry::S_IFREG => FT_FILE,
         entry::S_IFDIR => FT_DIR,
@@ -243,9 +248,6 @@ fn metadata_filetype(metadata: &Metadata) -> usize {
 }
 
 fn colorize(entry: &Entry) -> Option<String> {
-    #[cfg(unix)]
-    let filetype = unix_filetype(&entry.metadata.permissions());
-    #[cfg(not(unix))]
     let filetype = metadata_filetype(&entry.metadata);
 
     // TODO what about "bright"" setting?
@@ -380,10 +382,10 @@ fn format_entry(entry: &Entry) -> String {
     #[cfg(not(unix))]
     let mut buf = format!("{}  {:>8}  {}", &time_str, &size_str, &display_name);
 
-    if entry.metadata.is_dir() {
-        buf.push('/');
-    } else if entry.is_exec() {
-        buf.push('*');
+    if CONFIG_CLASSIFY.get() {
+        if let Some(token) = classify(entry) {
+            buf.push(token);
+        }
     }
 
     if entry.metadata.is_symlink() {
@@ -395,6 +397,31 @@ fn format_entry(entry: &Entry) -> String {
     }
 
     buf
+}
+
+fn classify(entry: &Entry) -> Option<char> {
+    let filetype = metadata_filetype(&entry.metadata);
+
+    match filetype {
+        FT_FILE => {
+            if entry.is_exec() {
+                Some('*')
+            } else {
+                None
+            }
+        }
+        FT_DIR => Some('/'),
+        FT_SYMLINK => {
+            if CONFIG_WIDE.get() {
+                Some('@')
+            } else {
+                None
+            }
+        }
+        FT_FIFO => Some('|'),
+        FT_SOCK => Some('='),
+        _ => None,
+    }
 }
 
 fn load_config() {
@@ -501,14 +528,23 @@ fn filemode_by_name(name: &str) -> Option<usize> {
 fn load_config_data(data: &serde_json::Value, config_file: &Path) {
     let mut errors = 0u32;
 
-    let mut bold = false;
-
     if let Some(bold_value) = data.get("bold") {
         if let Some(bold_bool) = bold_value.as_bool() {
-            bold = bold_bool;
+            CONFIG_BOLD.set(bold_bool);
         } else {
             eprintln!(
-                "{}: 'bright' should be a boolean: true or false",
+                "{}: 'bold' should be a boolean: true or false",
+                config_file.to_string_lossy()
+            );
+            errors += 1;
+        }
+    }
+    if let Some(classify_value) = data.get("classify") {
+        if let Some(classify_bool) = classify_value.as_bool() {
+            CONFIG_CLASSIFY.set(classify_bool);
+        } else {
+            eprintln!(
+                "{}: 'classify' should be a boolean: true or false",
                 config_file.to_string_lossy()
             );
             errors += 1;

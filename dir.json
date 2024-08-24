@@ -1,5 +1,6 @@
 {
     "bold": true,
+    "classify": true,
     "filetype": {
         "file": "normal",
         "directory": "yellow",
