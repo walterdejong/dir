@@ -13,6 +13,18 @@ use std::path::{Path, PathBuf};
 #[cfg(unix)]
 use std::os::unix::fs::MetadataExt;
 
+pub const S_IFMT: u32 = 0o170000;
+pub const S_IFSOCK: u32 = 0o140000;
+pub const S_IFLNK: u32 = 0o120000;
+pub const S_IFREG: u32 = 0o100000;
+pub const S_IFBLK: u32 = 0o060000;
+pub const S_IFDIR: u32 = 0o040000;
+pub const S_IFCHR: u32 = 0o020000;
+pub const S_IFIFO: u32 = 0o010000;
+pub const S_ISUID: u32 = 0o4000;
+pub const S_ISGID: u32 = 0o2000;
+pub const S_ISVTX: u32 = 0o1000;
+
 pub struct Entry {
     pub name: OsString,
     pub metadata: Metadata,
@@ -124,6 +136,18 @@ impl Entry {
 
     #[cfg(unix)]
     pub fn is_sticky(&self) -> bool {
+        const S_ISVTX: u32 = 0o1000;
+        let perms = self.metadata.mode() & S_ISVTX;
+        perms != 0
+    }
+
+    #[cfg(not(unix))]
+    pub fn is_sticky(&self) -> bool {
+        false
+    }
+
+    #[cfg(unix)]
+    pub fn is_fifo(&self) -> bool {
         const S_ISVTX: u32 = 0o1000;
         let perms = self.metadata.mode() & S_ISVTX;
         perms != 0

@@ -17,7 +17,7 @@ use std::{
     cmp::Ordering,
     collections::HashMap,
     ffi::OsStr,
-    fs::{self, File},
+    fs::{self, File, Metadata},
     io::{self, BufReader},
     path::{Path, PathBuf},
     sync::Mutex,
@@ -223,17 +223,64 @@ fn format_permissions(perms: &Permissions) -> String {
     s
 }
 
-#[allow(unused)]
-fn colorize(entry: &Entry) -> Option<String> {
-    if entry.metadata.is_symlink() {
-        let colormap = COLOR_BY_FILETYPE
-            .lock()
-            .expect("error: failed to lock interal lookup table");
-        let color = colormap[FT_SYMLINK];
-        return Some(format!("\x1b[{};1m", color));
+// Returns FT_xxx constant for entry filetype
+#[cfg(unix)]
+fn unix_filetype(perms: &Permissions) -> usize {
+    use std::os::unix::fs::PermissionsExt;
+
+    let mode = perms.mode() as u32;
+    let ftype = mode & entry::S_IFMT;
+    if ftype & entry::S_IFREG == entry::S_IFREG {
+        return FT_FILE;
+    }
+    if ftype & entry::S_IFDIR == entry::S_IFDIR {
+        return FT_DIR;
+    }
+    if ftype & entry::S_IFLNK == entry::S_IFLNK {
+        return FT_SYMLINK;
+    }
+    if ftype & entry::S_IFIFO == entry::S_IFIFO {
+        return FT_FIFO;
+    }
+    if ftype & entry::S_IFSOCK == entry::S_IFSOCK {
+        return FT_SOCK;
+    }
+    if ftype & entry::S_IFCHR == entry::S_IFCHR {
+        return FT_CHARDEV;
+    }
+    if ftype & entry::S_IFBLK == entry::S_IFBLK {
+        return FT_BLOCKDEV;
     }
 
-    if entry.metadata.is_dir() {
+    // we should never get here, but hey
+    FT_FILE
+}
+
+// Returns FT_xxx constant for entry filetype
+#[cfg(not(unix))]
+fn metadata_filetype(metadata: &Metadata) -> usize {
+    if metadata.is_file() {
+        return FT_FILE;
+    }
+    if metadata.is_dir() {
+        return FT_DIR;
+    }
+    if metadata.is_symlink() {
+        return FT_SYMLINK;
+    }
+
+    FT_FILE
+}
+
+fn colorize(entry: &Entry) -> Option<String> {
+    #[cfg(unix)]
+    let filetype = unix_filetype(&entry.metadata.permissions());
+    #[cfg(not(unix))]
+    let filetype = metadata_filetype(&entry.metadata);
+
+    // TODO what about "bright"" setting?
+
+    if filetype == FT_DIR {
         #[cfg(unix)]
         if entry.is_sticky() {
             let colormap = COLOR_BY_MODE
@@ -250,7 +297,7 @@ fn colorize(entry: &Entry) -> Option<String> {
         return Some(format!("\x1b[{};1m", color));
     }
 
-    if entry.metadata.is_file() {
+    if filetype == FT_FILE {
         #[cfg(unix)]
         if entry.is_suid() {
             let colormap = COLOR_BY_MODE
@@ -290,22 +337,17 @@ fn colorize(entry: &Entry) -> Option<String> {
         if let Some(color) = color_by_ext(&entry.name) {
             return Some(format!("\x1b[{};1m", color));
         }
-
-        // normal file
-        let colormap = COLOR_BY_FILETYPE
-            .lock()
-            .expect("error: failed to lock interal lookup table");
-        let color = colormap[FT_FILE];
-        if color != 0 {
-            return Some(format!("\x1b[{};1m", color));
-        } else {
-            return None;
-        }
     }
 
-    // TODO if unix filetype ...
-
-    None
+    let colormap = COLOR_BY_FILETYPE
+        .lock()
+        .expect("error: failed to lock interal lookup table");
+    let color = colormap[filetype];
+    if color != 0 {
+        Some(format!("\x1b[{}m", color))
+    } else {
+        None
+    }
 }
 
 // Returns color code for file extension, if the file extension is known
