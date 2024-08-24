@@ -5,19 +5,51 @@
 
 pub mod entry;
 
+use anyhow::Result;
 use chrono::{DateTime, Datelike, Local};
 use clap::{Arg, Command};
 use entry::Entry;
 use lazy_static::lazy_static;
+use once_cell::sync::OnceCell;
 #[cfg(unix)]
 use std::fs::Permissions;
-use std::{cmp::Ordering, collections::HashMap, ffi::OsStr, fs, io, path::Path, sync::Mutex};
-use once_cell::sync::OnceCell;
+use std::{
+    cmp::Ordering,
+    collections::HashMap,
+    ffi::OsStr,
+    fs::{self, File},
+    io::{self, BufReader},
+    path::{Path, PathBuf},
+    sync::Mutex,
+};
 
 lazy_static! {
     // hashmap: file extension -> color code
     static ref COLOR_BY_EXT: Mutex<HashMap<String, u32>> = Mutex::new(HashMap::new());
+
+    // lookup table -> color code by filetype index
+    static ref COLOR_BY_FILETYPE: Mutex<Vec<u32>> = Mutex::new(vec![0;FT_MAX]);
+
+    // lookup table -> color code by file mode
+    static ref COLOR_BY_MODE: Mutex<Vec<u32>> = Mutex::new(vec![0;FM_MAX]);
 }
+
+// filetype constant indices into COLOR_BY_FILETYPE
+const FT_FILE: usize = 0;
+const FT_DIR: usize = 1;
+const FT_SYMLINK: usize = 2;
+const FT_FIFO: usize = 3;
+const FT_SOCK: usize = 4;
+const FT_BLOCKDEV: usize = 5;
+const FT_CHARDEV: usize = 6;
+const FT_MAX: usize = 7;
+
+// file mode constant indices into COLOR_BY_MODE
+const FM_EXEC: usize = 0;
+const FM_SUID: usize = 1;
+const FM_SGID: usize = 2;
+const FM_STICKY: usize = 3;
+const FM_MAX: usize = 4;
 
 // format time as short month name + day + hours + minutes if it is in the current year
 // or less than 90 days ago
@@ -181,28 +213,46 @@ fn format_permissions(perms: &Permissions) -> String {
 
 #[allow(unused)]
 fn colorize(entry: &Entry) -> Option<String> {
-    const RED: u32 = 31;
-    const GREEN: u32 = 32;
-    const YELLOW: u32 = 33;
-    const BLUE: u32 = 34;
-    const MAGENTA: u32 = 35;
-    const CYAN: u32 = 36;
-
     if entry.metadata.is_symlink() {
-        return Some(format!("\x1b[{};1m", CYAN));
+        let colormap = COLOR_BY_FILETYPE
+            .lock()
+            .expect("error: failed to lock interal lookup table");
+        let color = colormap[FT_SYMLINK];
+        return Some(format!("\x1b[{};1m", color));
     }
     if entry.metadata.is_dir() {
-        return Some(format!("\x1b[{};1m", YELLOW));
+        let colormap = COLOR_BY_FILETYPE
+            .lock()
+            .expect("error: failed to lock interal lookup table");
+        let color = colormap[FT_DIR];
+        return Some(format!("\x1b[{};1m", color));
     }
 
     if entry.metadata.is_file() {
         if entry.is_exec() {
-            return Some(format!("\x1b[{};1m", GREEN));
+            let colormap = COLOR_BY_MODE
+                .lock()
+                .expect("error: failed to lock interal lookup table");
+            let color = colormap[FM_EXEC];
+            return Some(format!("\x1b[{};1m", color));
         }
 
         // by filename extension
-        if let Some(color_code) = color_by_ext(&entry.name) {
-            return Some(format!("\x1b[{};1m", color_code));
+        if let Some(color) = color_by_ext(&entry.name) {
+            return Some(format!("\x1b[{};1m", color));
+        }
+
+        // TODO if unix filemode
+
+        // normal file
+        let colormap = COLOR_BY_FILETYPE
+            .lock()
+            .expect("error: failed to lock interal lookup table");
+        let color = colormap[FT_FILE];
+        if color != 0 {
+            return Some(format!("\x1b[{};1m", color));
+        } else {
+            return None;
         }
     }
 
@@ -288,32 +338,280 @@ fn format_entry(entry: &Entry) -> String {
     buf
 }
 
-fn init_colors_by_ext() {
-    // put file extensions with their color code into a hashmap
+fn load_config() {
+    if let Some(config_path) = dirs::config_dir() {
+        let mut config_file = PathBuf::from(config_path);
+        config_file.push("dir");
+        config_file.push("dir.json");
 
-    let mut colormap = COLOR_BY_EXT
-        .lock()
-        .expect("failed to lock mutex on internal hashmap");
+        if !config_file.exists() {
+            return;
+        }
 
-    const MEDIA_FILES: &'static [&'static str] = &[
-        "mp3", "ogg", "jpg", "png", "jpeg", "bmp", "gif", "xcf", "tga", "xpm", "mpg", "mpeg",
-        "mp4", "avi", "mov",
-    ];
-    const MAGENTA: u32 = 35;
+        let f = File::open(&config_file).expect(&format!(
+            "error: failed to open {}",
+            config_file.to_string_lossy()
+        ));
+        let reader = BufReader::new(f);
+        let data: serde_json::Value = serde_json::from_reader(reader).expect(&format!(
+            "error: {}: syntax error in JSON",
+            config_file.to_string_lossy()
+        ));
 
-    for ext in MEDIA_FILES {
-        colormap.insert(ext.to_string(), MAGENTA);
+        load_config_data(&data, &config_file);
+    }
+}
+
+// Returns color code
+fn color_by_name(name: &str) -> Option<u32> {
+    lazy_static! {
+        static ref COLOR_BY_NAME: HashMap<&'static str, u32> = {
+            let mut map = HashMap::new();
+            map.insert("normal", 0);
+            map.insert("reverse", 7);
+            map.insert("black", 30);
+            map.insert("red", 31);
+            map.insert("green", 32);
+            map.insert("yellow", 33);
+            map.insert("blue", 34);
+            map.insert("magenta", 35);
+            map.insert("cyan", 36);
+            map.insert("white", 37);
+            map.insert("bg black", 40);
+            map.insert("bg red", 41);
+            map.insert("bg green", 42);
+            map.insert("bg yellow", 43);
+            map.insert("bg blue", 44);
+            map.insert("bg magenta", 45);
+            map.insert("bg cyan", 46);
+            map.insert("bg white", 47);
+            map
+        };
     }
 
-    const COMPRESSED_FILES: &'static [&'static str] = &[
-        "gz", "xz", "tar", "bz2", "zip", "iso", "dmg", "deb", "rpm", "Z", "lzh", "arj", "rar",
-        "jar",
-    ];
-    const RED: u32 = 31;
-
-    for ext in COMPRESSED_FILES {
-        colormap.insert(ext.to_string(), RED);
+    if let Some(color) = COLOR_BY_NAME.get(name) {
+        Some(*color)
+    } else {
+        None
     }
+}
+
+// Returns filetype index code
+fn filetype_by_name(name: &str) -> Option<usize> {
+    lazy_static! {
+        static ref FILETYPE_BY_NAME: HashMap<&'static str, usize> = {
+            let mut map = HashMap::new();
+            map.insert("file", FT_FILE);
+            map.insert("directory", FT_DIR);
+            map.insert("symlink", FT_SYMLINK);
+            map.insert("fifo", FT_FIFO);
+            map.insert("sock", FT_SOCK);
+            map.insert("blockdev", FT_BLOCKDEV);
+            map.insert("chardev", FT_CHARDEV);
+            map
+        };
+    }
+
+    if let Some(filetype) = FILETYPE_BY_NAME.get(name) {
+        Some(*filetype)
+    } else {
+        None
+    }
+}
+
+// Returns filemode index code
+fn filemode_by_name(name: &str) -> Option<usize> {
+    lazy_static! {
+        static ref FILEMODE_BY_NAME: HashMap<&'static str, usize> = {
+            let mut map = HashMap::new();
+            map.insert("exec", FM_EXEC);
+            map.insert("suid", FM_SUID);
+            map.insert("sgid", FM_SGID);
+            map.insert("sticky", FM_STICKY);
+            map
+        };
+    }
+
+    if let Some(filemode) = FILEMODE_BY_NAME.get(name) {
+        Some(*filemode)
+    } else {
+        None
+    }
+}
+
+fn load_config_data(data: &serde_json::Value, config_file: &Path) {
+    let mut errors = 0u32;
+
+    let mut bright = false;
+
+    if let Some(bright_value) = data.get("bright") {
+        if let Some(bright_bool) = bright_value.as_bool() {
+            bright = bright_bool;
+        } else {
+            eprintln!(
+                "{}: 'bright' should be a boolean: true or false",
+                config_file.to_string_lossy()
+            );
+            errors += 1;
+        }
+    }
+
+    if let Some(extension_value) = data.get("extension") {
+        errors += load_config_extension(&extension_value, config_file);
+    }
+
+    if let Some(filetype_value) = data.get("filetype") {
+        errors += load_config_filetype(&filetype_value, config_file);
+    }
+
+    if let Some(mode_value) = data.get("mode") {
+        errors += load_config_filemode(&mode_value, config_file);
+    }
+
+    if errors > 0 {
+        std::process::exit(2);
+    }
+}
+
+fn load_config_extension(extension_value: &serde_json::Value, config_file: &Path) -> u32 {
+    let mut errors = 0u32;
+
+    dbg!(&extension_value);
+    if let Some(extensions) = extension_value.as_object() {
+        let mut color_map = COLOR_BY_EXT
+            .lock()
+            .expect("error: failed to lock internal hashmap");
+        for (key, value) in extensions.iter() {
+            dbg!(&key);
+            if let Some(svalue) = value.as_str() {
+                dbg!(&svalue);
+                if let Some(color) = color_by_name(&svalue) {
+                    color_map.insert(key.to_string(), color);
+                } else {
+                    eprintln!(
+                        "{}: invalid color name: '{}'",
+                        &config_file.to_string_lossy(),
+                        &svalue
+                    );
+                    errors += 1;
+                }
+            } else {
+                eprintln!(
+                    "{}: invalid color string in map 'extension'",
+                    &config_file.to_string_lossy()
+                );
+                errors += 1;
+            }
+        }
+        dbg!(&color_map);
+    } else {
+        eprintln!(
+            "{}: 'extension' should be a map: {{\"ext\": \"color\"}}",
+            &config_file.to_string_lossy()
+        );
+        errors += 1;
+    }
+    errors
+}
+
+fn load_config_filetype(filetype_value: &serde_json::Value, config_file: &Path) -> u32 {
+    let mut errors = 0u32;
+
+    dbg!(&filetype_value);
+    if let Some(filetype) = filetype_value.as_object() {
+        let mut color_map = COLOR_BY_FILETYPE
+            .lock()
+            .expect("error: failed to lock internal lookup table");
+        for (key, value) in filetype.iter() {
+            dbg!(&key);
+            if let Some(ftype) = filetype_by_name(&key) {
+                if let Some(svalue) = value.as_str() {
+                    dbg!(&svalue);
+                    if let Some(color) = color_by_name(&svalue) {
+                        color_map[ftype] = color;
+                    } else {
+                        eprintln!(
+                            "{}: invalid color name: '{}'",
+                            &config_file.to_string_lossy(),
+                            &svalue
+                        );
+                        errors += 1;
+                    }
+                } else {
+                    eprintln!(
+                        "{}: invalid color string in map 'filetype'",
+                        &config_file.to_string_lossy()
+                    );
+                    errors += 1;
+                }
+            } else {
+                eprintln!(
+                    "{}: invalid filetype: '{}'",
+                    &config_file.to_string_lossy(),
+                    &key
+                );
+                errors += 1;
+            }
+        }
+        dbg!(&color_map);
+    } else {
+        eprintln!(
+            "{}: 'filetype' should be a map: {{\"ftype\": \"color\"}}",
+            &config_file.to_string_lossy()
+        );
+        errors += 1;
+    }
+    errors
+}
+
+fn load_config_filemode(mode_value: &serde_json::Value, config_file: &Path) -> u32 {
+    let mut errors = 0u32;
+
+    dbg!(&mode_value);
+    if let Some(mode) = mode_value.as_object() {
+        let mut color_map = COLOR_BY_MODE
+            .lock()
+            .expect("error: failed to lock internal lookup table");
+        for (key, value) in mode.iter() {
+            dbg!(&key);
+            if let Some(fmode) = filemode_by_name(&key) {
+                if let Some(svalue) = value.as_str() {
+                    dbg!(&svalue);
+                    if let Some(color) = color_by_name(&svalue) {
+                        color_map[fmode] = color;
+                    } else {
+                        eprintln!(
+                            "{}: invalid color name: '{}'",
+                            &config_file.to_string_lossy(),
+                            &svalue
+                        );
+                        errors += 1;
+                    }
+                } else {
+                    eprintln!(
+                        "{}: invalid color string in map 'filetype'",
+                        &config_file.to_string_lossy()
+                    );
+                    errors += 1;
+                }
+            } else {
+                eprintln!(
+                    "{}: invalid filetype: '{}'",
+                    &config_file.to_string_lossy(),
+                    &key
+                );
+                errors += 1;
+            }
+        }
+        dbg!(&color_map);
+    } else {
+        eprintln!(
+            "{}: 'mode' should be a map: {{\"fmode\": \"color\"}}",
+            &config_file.to_string_lossy()
+        );
+        errors += 1;
+    }
+    errors
 }
 
 fn main() {
@@ -334,7 +632,7 @@ fn main() {
         .collect::<Vec<_>>();
     // dbg!(&args);
 
-    init_colors_by_ext();
+    load_config();
 
     let mut exit_code = 0;
 
