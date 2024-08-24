@@ -501,11 +501,11 @@ fn filemode_by_name(name: &str) -> Option<usize> {
 fn load_config_data(data: &serde_json::Value, config_file: &Path) {
     let mut errors = 0u32;
 
-    let mut bright = false;
+    let mut bold = false;
 
-    if let Some(bright_value) = data.get("bright") {
-        if let Some(bright_bool) = bright_value.as_bool() {
-            bright = bright_bool;
+    if let Some(bold_value) = data.get("bold") {
+        if let Some(bold_bool) = bold_value.as_bool() {
+            bold = bold_bool;
         } else {
             eprintln!(
                 "{}: 'bright' should be a boolean: true or false",

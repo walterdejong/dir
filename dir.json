@@ -1,0 +1,51 @@
+{
+    "bold": true,
+    "filetype": {
+        "file": "normal",
+        "directory": "yellow",
+        "symlink": "cyan",
+        "fifo": "cyan",
+        "sock": "cyan",
+        "blockdev": "yellow",
+        "chardev": "yellow"
+    },
+    "mode": {
+        "exec": "green",
+        "suid": "bg red",
+        "sgid": "bg red",
+        "sticky": "bg green"
+    },
+    "extension": {
+        "exe": "green",
+
+        "tar": "red",
+        "gz": "red",
+        "xz": "red",
+        "bz2": "red",
+        "zip": "red",
+        "z": "red",
+        "iso": "red",
+        "dmg": "red",
+        "rpm": "red",
+        "deb": "red",
+        "rar": "red",
+
+        "png": "magenta",
+        "jpg": "magenta",
+        "jpeg": "magenta",
+        "raw": "magenta",
+        "bmp": "magenta",
+        "xcf": "magenta",
+        "gif": "magenta",
+        "tga": "magenta",
+        "heic": "magenta",
+
+        "mp3": "magenta",
+        "ogg": "magenta",
+        "mp4": "magenta",
+        "mpg": "magenta",
+        "mpeg": "magenta",
+        "mov": "magenta",
+        "avi": "magenta"
+    }
+}
