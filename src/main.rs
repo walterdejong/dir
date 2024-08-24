@@ -232,7 +232,17 @@ fn colorize(entry: &Entry) -> Option<String> {
         let color = colormap[FT_SYMLINK];
         return Some(format!("\x1b[{};1m", color));
     }
+
     if entry.metadata.is_dir() {
+        #[cfg(unix)]
+        if entry.is_sticky() {
+            let colormap = COLOR_BY_MODE
+                .lock()
+                .expect("error: failed to lock interal lookup table");
+            let color = colormap[FM_STICKY];
+            return Some(format!("\x1b[{}m", color));
+        }
+
         let colormap = COLOR_BY_FILETYPE
             .lock()
             .expect("error: failed to lock interal lookup table");
@@ -241,6 +251,33 @@ fn colorize(entry: &Entry) -> Option<String> {
     }
 
     if entry.metadata.is_file() {
+        #[cfg(unix)]
+        if entry.is_suid() {
+            let colormap = COLOR_BY_MODE
+                .lock()
+                .expect("error: failed to lock interal lookup table");
+            let color = colormap[FM_SUID];
+            return Some(format!("\x1b[{}m", color));
+        }
+
+        #[cfg(unix)]
+        if entry.is_sgid() {
+            let colormap = COLOR_BY_MODE
+                .lock()
+                .expect("error: failed to lock interal lookup table");
+            let color = colormap[FM_SGID];
+            return Some(format!("\x1b[{}m", color));
+        }
+
+        #[cfg(unix)]
+        if entry.is_sticky() {
+            let colormap = COLOR_BY_MODE
+                .lock()
+                .expect("error: failed to lock interal lookup table");
+            let color = colormap[FM_STICKY];
+            return Some(format!("\x1b[{}m", color));
+        }
+
         if entry.is_exec() {
             let colormap = COLOR_BY_MODE
                 .lock()
@@ -253,8 +290,6 @@ fn colorize(entry: &Entry) -> Option<String> {
         if let Some(color) = color_by_ext(&entry.name) {
             return Some(format!("\x1b[{};1m", color));
         }
-
-        // TODO if unix filemode
 
         // normal file
         let colormap = COLOR_BY_FILETYPE

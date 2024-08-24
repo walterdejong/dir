@@ -97,6 +97,42 @@ impl Entry {
         let lossy_name = self.name.to_string_lossy();
         lossy_name.ends_with(".exe") || lossy_name.ends_with(".EXE")
     }
+
+    #[cfg(unix)]
+    pub fn is_suid(&self) -> bool {
+        const S_ISUID: u32 = 0o4000;
+        let perms = self.metadata.mode() & S_ISUID;
+        perms != 0
+    }
+
+    #[cfg(not(unix))]
+    pub fn is_suid(&self) -> bool {
+        false
+    }
+
+    #[cfg(unix)]
+    pub fn is_sgid(&self) -> bool {
+        const S_ISGID: u32 = 0o2000;
+        let perms = self.metadata.mode() & S_ISGID;
+        perms != 0
+    }
+
+    #[cfg(not(unix))]
+    pub fn is_sgid(&self) -> bool {
+        false
+    }
+
+    #[cfg(unix)]
+    pub fn is_sticky(&self) -> bool {
+        const S_ISVTX: u32 = 0o1000;
+        let perms = self.metadata.mode() & S_ISVTX;
+        perms != 0
+    }
+
+    #[cfg(not(unix))]
+    pub fn is_sticky(&self) -> bool {
+        false
+    }
 }
 
 // EOB
