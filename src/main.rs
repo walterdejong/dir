@@ -169,11 +169,15 @@ fn format_permissions(perms: &Permissions) -> String {
     // rwx user (also does setuid bit)
     s.push(if mode & S_IRUSR == S_IRUSR { 'r' } else { '-' });
     s.push(if mode & S_IWUSR == S_IWUSR { 'w' } else { '-' });
-    s.push(if mode & S_ISUID == S_ISUID {
-        's'
-    } else {
-        if mode & S_IXUSR == S_IXUSR {
+    s.push(if mode & S_IXUSR == S_IXUSR {
+        if mode & S_ISUID == S_ISUID {
+            's'
+        } else {
             'x'
+        }
+    } else {
+        if mode & S_ISUID == S_ISUID {
+            'S'
         } else {
             '-'
         }
@@ -182,11 +186,15 @@ fn format_permissions(perms: &Permissions) -> String {
     // rwx group (also does setgid bit)
     s.push(if mode & S_IRGRP == S_IRGRP { 'r' } else { '-' });
     s.push(if mode & S_IWGRP == S_IWGRP { 'w' } else { '-' });
-    s.push(if mode & S_ISGID == S_ISGID {
-        's'
-    } else {
-        if mode & S_IXGRP == S_IXGRP {
+    s.push(if mode & S_IXGRP == S_IXGRP {
+        if mode & S_ISGID == S_ISGID {
+            's'
+        } else {
             'x'
+        }
+    } else {
+        if mode & S_ISGID == S_ISGID {
+            'S'
         } else {
             '-'
         }
@@ -195,11 +203,15 @@ fn format_permissions(perms: &Permissions) -> String {
     // rwx others (also does sticky bit)
     s.push(if mode & S_IROTH == S_IROTH { 'r' } else { '-' });
     s.push(if mode & S_IWOTH == S_IWOTH { 'w' } else { '-' });
-    s.push(if mode & S_ISVTX == S_ISVTX {
-        't'
-    } else {
-        if mode & S_IXOTH == S_IXOTH {
+    s.push(if mode & S_IXOTH == S_IXOTH {
+        if mode & S_ISVTX == S_ISVTX {
+            't'
+        } else {
             'x'
+        }
+    } else {
+        if mode & S_ISVTX == S_ISVTX {
+            'T'
         } else {
             '-'
         }
