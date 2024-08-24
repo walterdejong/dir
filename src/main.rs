@@ -17,7 +17,7 @@ use std::{
     cmp::Ordering,
     collections::HashMap,
     ffi::OsStr,
-    fs::{self, File, Metadata},
+    fs::{self, File},
     io::{self, BufReader},
     path::{Path, PathBuf},
     sync::Mutex,
@@ -544,8 +544,8 @@ fn load_config_extension(extension_value: &serde_json::Value, config_file: &Path
             dbg!(&key);
             if let Some(svalue) = value.as_str() {
                 dbg!(&svalue);
-                if let Some(color) = color_by_name(&svalue) {
-                    color_map.insert(key.to_string(), color);
+                if let Some(color) = color_by_name(&svalue.to_lowercase()) {
+                    color_map.insert(key.to_lowercase(), color);
                 } else {
                     eprintln!(
                         "{}: invalid color name: '{}'",
@@ -583,10 +583,10 @@ fn load_config_filetype(filetype_value: &serde_json::Value, config_file: &Path) 
             .expect("error: failed to lock internal lookup table");
         for (key, value) in filetype.iter() {
             dbg!(&key);
-            if let Some(ftype) = filetype_by_name(&key) {
+            if let Some(ftype) = filetype_by_name(&key.to_lowercase()) {
                 if let Some(svalue) = value.as_str() {
                     dbg!(&svalue);
-                    if let Some(color) = color_by_name(&svalue) {
+                    if let Some(color) = color_by_name(&svalue.to_lowercase()) {
                         color_map[ftype] = color;
                     } else {
                         eprintln!(
@@ -633,10 +633,10 @@ fn load_config_filemode(mode_value: &serde_json::Value, config_file: &Path) -> u
             .expect("error: failed to lock internal lookup table");
         for (key, value) in mode.iter() {
             dbg!(&key);
-            if let Some(fmode) = filemode_by_name(&key) {
+            if let Some(fmode) = filemode_by_name(&key.to_lowercase()) {
                 if let Some(svalue) = value.as_str() {
                     dbg!(&svalue);
-                    if let Some(color) = color_by_name(&svalue) {
+                    if let Some(color) = color_by_name(&svalue.to_lowercase()) {
                         color_map[fmode] = color;
                     } else {
                         eprintln!(
