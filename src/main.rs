@@ -924,9 +924,70 @@ fn show_listing(entries: &[Entry]) {
 }
 
 fn show_wide_listing(entries: &[&Entry]) {
-    // TODO print in columns
+    // print in columns
+
+    if entries.is_empty() {
+        return;
+    }
+
+    // Windows `dir` does a naive column max width, where each column has the same width
+    // GNU `ls` does a funny puzzle where it has variable column widths,
+    // enabling it to cram more columns onto the screen
+    // (for now) we use the naive method
+
+    // determine max column width
+    let mut width = entries.iter().map(|x| x.name.to_string_lossy().chars().count()).max().unwrap() + 1;
+    if CONFIG_CLASSIFY.get() {
+        width += 1;
+    }
+    let width = width;
+
+    // determine terminal width
+    let term_width = if let Some((terminal_size::Width(w), terminal_size::Height(_))) = terminal_size::terminal_size() {
+        w as usize
+    } else {
+        // note, getting the terminal size will fail when output is redirected
+        80usize
+    };
+
+    let mut num_columns = term_width / width;
+    if num_columns <= 0 {
+        num_columns = 1;
+    }
+
+    // make columns vector of vectors
+    let length = (entries.len() + num_columns - 1) / num_columns;
+    const NONE: Option<&Entry> = None;
+    let mut columns = vec![vec![NONE; length]; num_columns];
+    let mut i = 0usize;
+    let mut col = 0usize;
+
+    // fill the columns with entry refs
     for entry in entries {
-        println!("{}", format_wide_entry(*entry));
+        columns[col][i] = Some(*entry);
+        i += 1;
+        if i >= length {
+            i = 0;
+            col += 1;
+        }
+    }
+
+    // print columns
+    let column_width = if CONFIG_CLASSIFY.get() {
+        width - 1
+    } else {
+        width
+    };
+
+    for i in 0..length {
+        for col in 0..num_columns {
+            if let Some(entry) = columns[col][i] {
+                // use the length of onscreen text, without any color codes
+                let spacer_width = column_width - entry.name.to_string_lossy().chars().count();
+                print!("{}{:<spacer_width$}", format_wide_entry(entry), " ");
+            }
+        }
+        println!("");
     }
 }
 
