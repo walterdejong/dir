@@ -370,7 +370,7 @@ fn format_entry(entry: &Entry) -> String {
         size_str = format_size(entry.metadata.len());
     }
 
-    let display_name = if let Some(color_str) = colorize(&entry) {
+    let display_name = if let Some(color_str) = colorize(entry) {
         // format with colors
         const END_COLOR: &'static str = "\x1b[0m";
         format!(
@@ -403,6 +403,29 @@ fn format_entry(entry: &Entry) -> String {
             buf.push_str(&format!(" -> {}", &display_linkdest));
         }
         // else: should not / can not happen, just ignore it
+    }
+
+    buf
+}
+
+fn format_wide_entry(entry: &Entry) -> String {
+    let mut buf = if let Some(color_str) = colorize(entry) {
+        // format with colors
+        const END_COLOR: &'static str = "\x1b[0m";
+        format!(
+            "{}{}{}",
+            &color_str,
+            entry.name.to_string_lossy(),
+            END_COLOR
+        )
+    } else {
+        entry.name.to_string_lossy().to_string()
+    };
+
+    if CONFIG_CLASSIFY.get() {
+        if let Some(token) = classify(entry) {
+            buf.push(token);
+        }
     }
 
     buf
@@ -770,6 +793,8 @@ fn main() {
     if matches.get_flag("wide") {
         CONFIG_LONG.set(false);
     }
+    // TODO add flag --one
+    // TODO add flag --no-color
 
     // it's easier to work with Paths, so
     // convert Vec<&String> args to Vec<PathBuf>
@@ -876,15 +901,32 @@ fn list_files(file_paths: &[PathBuf]) -> u32 {
 
 fn show_listing(entries: &[Entry]) {
     // show listing of all entries
+    // if not option --long (equals --wide), show wide listing
     // if not option --all, do not show hidden files
 
-    if !CONFIG_ALL.get() {
+    let entries = if !CONFIG_ALL.get() {
         entries
             .iter()
             .filter(|x| !x.is_hidden())
-            .for_each(|x| println!("{}", format_entry(x)));
+            .collect::<Vec<&Entry>>()
     } else {
-        entries.iter().for_each(|x| println!("{}", format_entry(x)));
+        entries.iter().collect::<Vec<&Entry>>()
+    };
+
+    if !CONFIG_LONG.get() {
+        show_wide_listing(&entries);
+        return;
+    }
+
+    for entry in entries {
+        println!("{}", format_entry(entry));
+    }
+}
+
+fn show_wide_listing(entries: &[&Entry]) {
+    // TODO print in columns
+    for entry in entries {
+        println!("{}", format_wide_entry(*entry));
     }
 }
 
