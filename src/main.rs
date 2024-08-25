@@ -10,17 +10,18 @@ use clap::{Arg, Command};
 use entry::Entry;
 use lazy_static::lazy_static;
 use once_cell::sync::OnceCell;
-#[cfg(unix)]
 use std::{
     cell::Cell,
     cmp::Ordering,
     collections::HashMap,
     ffi::OsStr,
-    fs::{self, File, Metadata, Permissions},
+    fs::{self, File, Metadata},
     io::{self, BufReader},
     path::{Path, PathBuf},
     sync::Mutex,
 };
+#[cfg(unix)]
+use std::fs::Permissions;
 
 thread_local! {
     static CONFIG_BOLD: Cell<bool> = Cell::new(true);
