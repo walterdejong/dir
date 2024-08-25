@@ -107,7 +107,19 @@ impl Entry {
         const FILE_ATTRIBUTE_HIDDEN: u32 = 2;
         const FILE_ATTRIBUTE_SYSTEM: u32 = 4;
 
-        attribs & (FILE_ATTRIBUTE_HIDDEN | FILE_ATTRIBUTE_SYSTEM) != 0
+        if attribs & (FILE_ATTRIBUTE_HIDDEN | FILE_ATTRIBUTE_SYSTEM) != 0 {
+            return true;
+        }
+
+        // file is not hidden, BUT if it starts with a dot then assume
+        // the same behavior as for UNIX; starting with a dot means hidden
+        // This is a convenience for using UNIX tooling under Windows
+        let s = self.name.to_string_lossy();
+        let first = s
+            .chars()
+            .next()
+            .expect("panic: this should not have happened");
+        first == '.'
     }
 
     #[cfg(unix)]

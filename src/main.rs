@@ -24,6 +24,7 @@ use std::{
 };
 
 thread_local! {
+    static CONFIG_ALL: Cell<bool> = Cell::new(false);
     static CONFIG_BOLD: Cell<bool> = Cell::new(true);
     static CONFIG_CLASSIFY: Cell<bool> = Cell::new(true);
     static CONFIG_LONG: Cell<bool> = Cell::new(true);
@@ -710,6 +711,11 @@ fn main() {
         .author("Walter de Jong <walter@heiho.net>")
         .about("Show directory listing")
         .args([
+            Arg::new("all")
+                .short('a')
+                .long("all")
+                .action(ArgAction::SetTrue)
+                .help("show all, including hidden"),
             Arg::new("long")
                 .short('l')
                 .long("long")
@@ -736,6 +742,9 @@ fn main() {
 
     load_config();
 
+    if matches.get_flag("all") {
+        CONFIG_ALL.set(true);
+    }
     if matches.get_flag("long") {
         CONFIG_LONG.set(true);
     }
@@ -836,7 +845,7 @@ fn list_dir(path: &Path) -> Result<(), io::Error> {
             Err(e) => return Err(e),
         };
 
-        if entry.is_hidden() {
+        if ! CONFIG_ALL.get() && entry.is_hidden() {
             continue;
         }
 
