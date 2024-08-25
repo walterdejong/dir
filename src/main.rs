@@ -771,29 +771,32 @@ fn main() {
         CONFIG_LONG.set(false);
     }
 
+    // it's easier to work with Paths, so
+    // convert Vec<&String> args to Vec<PathBuf>
+    #[cfg(unix)]
+    let arg_paths = args.iter().map(|s| PathBuf::from(s)).collect::<Vec<PathBuf>>();
     // on Windows perform file globbing on args
     #[cfg(not(unix))]
     let arg_paths = windows_globbing(&args);
-    #[cfg(unix)]
-    let arg_paths = args.iter().map(|s| PathBuf::from(s)).collect::<PathBuf>();
-    dbg!(arg_paths);
+    dbg!(&arg_paths);
 
     // we first group the given directory arguments together and list those
     // then group the files together and list those
-    // // TODO FIXME these were Vec<&String> but are now Vec<PathBuf>
-    let dir_args = collect_dir_args(&args);
-    let file_args = collect_file_args(&args);
+    let dir_paths = arg_paths.iter().filter(|x| x.is_dir()).map(|x| x.clone()).collect::<Vec<PathBuf>>();
+    dbg!(&dir_paths);
+    let file_paths = arg_paths.iter().filter(|x| ! x.is_dir()).map(|x| x.clone()).collect::<Vec<PathBuf>>();
+    dbg!(&file_paths);
 
     let mut errors = 0;
 
-    errors += list_directories(&dir_args);
+    errors += list_directories(&dir_paths);
 
     // when listing dirs and files, put a newline in between
-    if dir_args.len() > 0 && file_args.len() > 0 {
+    if dir_paths.len() > 0 && file_paths.len() > 0 {
         println!("");
     }
 
-    errors += list_files(&file_args);
+    errors += list_files(&file_paths);
 
     if errors > 0 {
         std::process::exit(2);
@@ -803,16 +806,14 @@ fn main() {
 
 // show directory listings
 // Returns number of printed errors
-// // TODO FIXME these were &[&String] but are now &[PathBuf]
-fn list_directories(dir_args: &[&String]) -> u32 {
+fn list_directories(dir_paths: &[PathBuf]) -> u32 {
     let mut errors = 0u32;
 
-    for (idx, dir_arg) in dir_args.iter().enumerate() {
-        let path = Path::new(*dir_arg);
-        let mut entries = match list_dir(&path) {
+    for (idx, dir_path) in dir_paths.iter().enumerate() {
+        let mut entries = match list_dir(&dir_path) {
             Ok(v) => v,
             Err(e) => {
-                eprintln!("{}: {}", &path.to_string_lossy(), e);
+                eprintln!("{}: {}", &dir_path.to_string_lossy(), e);
                 errors += 1;
                 continue;
             }
@@ -822,20 +823,19 @@ fn list_directories(dir_args: &[&String]) -> u32 {
         entries.sort_by(sort_dirs_first);
 
         // when listing multiple directories, show the directory name on top
-        if dir_args.len() > 1 {
-            if dir_arg.len() > 0 {
-                if dir_arg.chars().last().unwrap() != std::path::MAIN_SEPARATOR {
-                    println!("{}{}", dir_arg, std::path::MAIN_SEPARATOR);
-                } else {
-                    println!("{}", dir_arg);
-                }
+        if dir_paths.len() > 1 {
+            let path = dir_path.as_path();
+            if path.ends_with(std::path::MAIN_SEPARATOR_STR) {
+                println!("{}", &path.to_string_lossy());
+            } else {
+                println!("{}{}", &path.to_string_lossy(), std::path::MAIN_SEPARATOR);
             }
         }
 
         show_listing(&entries);
 
         // when listing multiple directories, put a newline in between
-        if dir_args.len() > 1 && idx < dir_args.len() - 1 {
+        if dir_paths.len() > 1 && idx < dir_paths.len() - 1 {
             println!("");
         }
     }
@@ -844,13 +844,12 @@ fn list_directories(dir_args: &[&String]) -> u32 {
 
 // show listing of files given on command-line
 // Returns number of printed errors
-// // TODO FIXME these were &[&String] but are now &[PathBuf]
-fn list_files(file_args: &[&String]) -> u32 {
+fn list_files(file_paths: &[PathBuf]) -> u32 {
     let mut errors = 0u32;
 
     let mut entries = Vec::new();
-    for file_arg in file_args.iter() {
-        let path = Path::new(*file_arg);
+    for file_path in file_paths.iter() {
+        let path = file_path.as_path();
         let entry = match Entry::from_path(path) {
             Ok(x) => x,
             Err(e) => {
@@ -903,34 +902,6 @@ fn list_dir(path: &Path) -> Result<Vec<Entry>, io::Error> {
         entries.push(entry);
     }
     Ok(entries)
-}
-
-// Returns a vec with all arguments that are directories
-// // TODO FIXME these were &[&String] but are now &[PathBuf]
-fn collect_dir_args<'a>(args: &[&'a String]) -> Vec<&'a String> {
-    let mut v = Vec::new();
-
-    for arg in args.iter() {
-        let path = Path::new(*arg);
-        if path.is_dir() {
-            v.push(*arg);
-        }
-    }
-    v
-}
-
-// Returns a vec with all arguments that are files
-// // TODO FIXME these were &[&String] but are now &[PathBuf]
-fn collect_file_args<'a>(args: &[&'a String]) -> Vec<&'a String> {
-    let mut v = Vec::new();
-
-    for arg in args.iter() {
-        let path = Path::new(*arg);
-        if ! path.is_dir() {
-            v.push(*arg);
-        }
-    }
-    v
 }
 
 fn sort_dirs_first(a: &Entry, b: &Entry) -> Ordering {
