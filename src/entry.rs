@@ -154,7 +154,7 @@ impl Entry {
     }
 
     #[cfg(not(unix))]
-    pub fn is_sticky(&self) -> bool {
+    pub fn is_fifo(&self) -> bool {
         false
     }
 }
