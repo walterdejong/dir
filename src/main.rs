@@ -774,18 +774,26 @@ fn main() {
     // it's easier to work with Paths, so
     // convert Vec<&String> args to Vec<PathBuf>
     #[cfg(unix)]
-    let arg_paths = args.iter().map(|s| PathBuf::from(s)).collect::<Vec<PathBuf>>();
+    let arg_paths = args
+        .iter()
+        .map(|s| PathBuf::from(s))
+        .collect::<Vec<PathBuf>>();
     // on Windows perform file globbing on args
     #[cfg(not(unix))]
     let arg_paths = windows_globbing(&args);
-    dbg!(&arg_paths);
 
     // we first group the given directory arguments together and list those
     // then group the files together and list those
-    let dir_paths = arg_paths.iter().filter(|x| x.is_dir()).map(|x| x.clone()).collect::<Vec<PathBuf>>();
-    dbg!(&dir_paths);
-    let file_paths = arg_paths.iter().filter(|x| ! x.is_dir()).map(|x| x.clone()).collect::<Vec<PathBuf>>();
-    dbg!(&file_paths);
+    let dir_paths = arg_paths
+        .iter()
+        .filter(|x| x.is_dir())
+        .map(|x| x.clone())
+        .collect::<Vec<PathBuf>>();
+    let file_paths = arg_paths
+        .iter()
+        .filter(|x| !x.is_dir())
+        .map(|x| x.clone())
+        .collect::<Vec<PathBuf>>();
 
     let mut errors = 0;
 
@@ -870,8 +878,11 @@ fn show_listing(entries: &[Entry]) {
     // show listing of all entries
     // if not option --all, do not show hidden files
 
-    if ! CONFIG_ALL.get() {
-        entries.iter().filter(|x| ! x.is_hidden()).for_each(|x| println!("{}", format_entry(x)));
+    if !CONFIG_ALL.get() {
+        entries
+            .iter()
+            .filter(|x| !x.is_hidden())
+            .for_each(|x| println!("{}", format_entry(x)));
     } else {
         entries.iter().for_each(|x| println!("{}", format_entry(x)));
     }
@@ -898,7 +909,7 @@ fn list_dir(path: &Path) -> Result<Vec<Entry>, io::Error> {
                         continue;
                     }
                 }
-            },
+            }
             Err(e) => return Err(e),
         };
         entries.push(entry);
