@@ -88,8 +88,8 @@ impl Entry {
         }
     }
 
+    #[cfg(unix)]
     pub fn is_hidden(&self) -> bool {
-        // TODO is_hidden(): this is for unix. For windows, use metadata ext
         // sucks that we have to convert this entire thing just to look at one first character
         let s = self.name.to_string_lossy();
         let first = s
@@ -97,6 +97,17 @@ impl Entry {
             .next()
             .expect("panic: this should not have happened");
         first == '.'
+    }
+
+    #[cfg(not(unix))]
+    pub fn is_hidden(&self) -> bool {
+        use std::os::windows::fs::MetadataExt;
+        let attribs = self.metadata.file_attributes();
+
+        const FILE_ATTRIBUTE_HIDDEN: u32 = 2;
+        const FILE_ATTRIBUTE_SYSTEM: u32 = 4;
+
+        attribs & (FILE_ATTRIBUTE_HIDDEN | FILE_ATTRIBUTE_SYSTEM) != 0
     }
 
     #[cfg(unix)]
