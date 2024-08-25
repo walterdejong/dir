@@ -234,7 +234,7 @@ fn metadata_filetype(metadata: &Metadata) -> usize {
 }
 
 // Returns FT_xxx constant for entry filetype
-#[cfg(not(unix))]
+#[cfg(windows)]
 fn metadata_filetype(metadata: &Metadata) -> usize {
     if metadata.is_file() {
         return FT_FILE;
@@ -358,7 +358,7 @@ fn format_entry(entry: &Entry) -> String {
     #[cfg(not(unix))]
     {
         // permissions not implemented for non-unix platform
-        // TODO for --all show RHS bits
+        // TODO on windows, for --all show RHS bits
     }
 
     let time_str = format_time(&entry.mtime());
@@ -729,7 +729,7 @@ fn load_config_filemode(mode_value: &serde_json::Value, config_file: &Path) -> u
     errors
 }
 
-#[cfg(not(unix))]
+#[cfg(windows)]
 fn windows_globbing(args: &[&String]) -> Vec<PathBuf> {
     let mut v = Vec::new();
 
@@ -804,7 +804,7 @@ fn main() {
         .map(|s| PathBuf::from(s))
         .collect::<Vec<PathBuf>>();
     // on Windows perform file globbing on args
-    #[cfg(not(unix))]
+    #[cfg(windows)]
     let arg_paths = windows_globbing(&args);
 
     // we first group the given directory arguments together and list those

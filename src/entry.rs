@@ -100,7 +100,7 @@ impl Entry {
         first == '.'
     }
 
-    #[cfg(not(unix))]
+    #[cfg(windows)]
     pub fn is_hidden(&self) -> bool {
         use std::os::windows::fs::MetadataExt;
         let attribs = self.metadata.file_attributes();
