@@ -6,10 +6,12 @@
 pub mod entry;
 
 use chrono::{DateTime, Datelike, Local};
-use clap::{Arg, Command};
+use clap::{Arg, ArgAction, Command};
 use entry::Entry;
 use lazy_static::lazy_static;
 use once_cell::sync::OnceCell;
+#[cfg(unix)]
+use std::fs::Permissions;
 use std::{
     cell::Cell,
     cmp::Ordering,
@@ -20,13 +22,11 @@ use std::{
     path::{Path, PathBuf},
     sync::Mutex,
 };
-#[cfg(unix)]
-use std::fs::Permissions;
 
 thread_local! {
     static CONFIG_BOLD: Cell<bool> = Cell::new(true);
     static CONFIG_CLASSIFY: Cell<bool> = Cell::new(true);
-    static CONFIG_WIDE: Cell<bool> = Cell::new(false);
+    static CONFIG_LONG: Cell<bool> = Cell::new(true);
 }
 
 lazy_static! {
@@ -419,10 +419,10 @@ fn classify(entry: &Entry) -> Option<char> {
         }
         FT_DIR => Some('/'),
         FT_SYMLINK => {
-            if CONFIG_WIDE.get() {
-                Some('@')
-            } else {
+            if CONFIG_LONG.get() {
                 None
+            } else {
+                Some('@')
             }
         }
         FT_FIFO => Some('|'),
@@ -709,7 +709,19 @@ fn main() {
         .version("0.1.0")
         .author("Walter de Jong <walter@heiho.net>")
         .about("Show directory listing")
-        .args([Arg::new("path").num_args(0..).default_value(".")])
+        .args([
+            Arg::new("long")
+                .short('l')
+                .long("long")
+                .action(ArgAction::SetTrue)
+                .help("show long listing with details"),
+            Arg::new("wide")
+                .short('w')
+                .long("wide")
+                .action(ArgAction::SetTrue)
+                .help("show listing in columns without details"),
+            Arg::new("path").num_args(0..).default_value("."),
+        ])
         .get_matches();
     // dbg!(&matches);
 
@@ -724,6 +736,35 @@ fn main() {
 
     load_config();
 
+    if matches.get_flag("long") {
+        CONFIG_LONG.set(true);
+    }
+    if matches.get_flag("wide") {
+        CONFIG_LONG.set(false);
+    }
+
+    // TODO foreach dir argument get Vec<Entry> and sort and display that
+    // TODO collect each file argument and get Vec<Entry> for those and sort and display that
+    // TODO on windows do file globbing
+
+    if CONFIG_LONG.get() {
+        show_long_listing(&args);
+    } else {
+        show_wide_listing(&args);
+    }
+}
+
+fn show_wide_listing(args: &[&String]) {
+    dbg!(&args);
+    let mut exit_code = 0;
+
+
+
+
+    std::process::exit(exit_code);
+}
+
+fn show_long_listing(args: &[&String]) {
     let mut exit_code = 0;
 
     let mut file_printed = false;
@@ -785,6 +826,8 @@ fn list_dir(path: &Path) -> Result<(), io::Error> {
         // we don't want that ... so therefore I convert it to a custom Entry type
         // the Entry holds all the same attributes; name, metadata, linkdest (if it is a symbolic link)
         // but also (attempts) has an easier interface
+
+        // TODO any error here should skip the entry; do not return
         // Mind that the conversion may error, in which case we print the error
         // and skip this entry
 

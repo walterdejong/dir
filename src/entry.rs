@@ -89,6 +89,7 @@ impl Entry {
     }
 
     pub fn is_hidden(&self) -> bool {
+        // TODO is_hidden(): this is for unix. For windows, use metadata ext
         // sucks that we have to convert this entire thing just to look at one first character
         let s = self.name.to_string_lossy();
         let first = s
