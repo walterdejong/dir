@@ -25,6 +25,7 @@ pub const S_ISUID: u32 = 0o4000;
 pub const S_ISGID: u32 = 0o2000;
 pub const S_ISVTX: u32 = 0o1000;
 
+#[derive(Debug)]
 pub struct Entry {
     pub name: OsString,
     pub metadata: Metadata,

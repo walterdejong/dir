@@ -358,6 +358,7 @@ fn format_entry(entry: &Entry) -> String {
     #[cfg(not(unix))]
     {
         // permissions not implemented for non-unix platform
+        // TODO for --all show RHS bits
     }
 
     let time_str = format_time(&entry.mtime());
@@ -705,6 +706,24 @@ fn load_config_filemode(mode_value: &serde_json::Value, config_file: &Path) -> u
     errors
 }
 
+#[cfg(not(unix))]
+fn windows_globbing(args: &[&String]) -> Vec<PathBuf> {
+    let mut v = Vec::new();
+
+    for arg in args.iter() {
+        for path in glob::glob(*arg).expect("error in file globbing") {
+            match path {
+                Ok(path) => v.push(path),
+                Err(_) => {
+                    eprintln!("error in file globbing");
+                    continue;
+                }
+            }
+        }
+    }
+    v
+}
+
 fn main() {
     let matches = Command::new("dir")
         .version("0.1.0")
@@ -752,82 +771,112 @@ fn main() {
         CONFIG_LONG.set(false);
     }
 
-    // TODO foreach dir argument get Vec<Entry> and sort and display that
-    // TODO collect each file argument and get Vec<Entry> for those and sort and display that
-    // TODO on windows do file globbing
+    // on Windows perform file globbing on args
+    #[cfg(not(unix))]
+    let arg_paths = windows_globbing(&args);
+    #[cfg(unix)]
+    let arg_paths = args.iter().map(|s| PathBuf::from(s)).collect::<PathBuf>();
+    dbg!(arg_paths);
 
-    if CONFIG_LONG.get() {
-        show_long_listing(&args);
-    } else {
-        show_wide_listing(&args);
+    // we first group the given directory arguments together and list those
+    // then group the files together and list those
+    // // TODO FIXME these were Vec<&String> but are now Vec<PathBuf>
+    let dir_args = collect_dir_args(&args);
+    let file_args = collect_file_args(&args);
+
+    let mut errors = 0;
+
+    errors += list_directories(&dir_args);
+
+    // when listing dirs and files, put a newline in between
+    if dir_args.len() > 0 && file_args.len() > 0 {
+        println!("");
     }
+
+    errors += list_files(&file_args);
+
+    if errors > 0 {
+        std::process::exit(2);
+    }
+    std::process::exit(0);
 }
 
-fn show_wide_listing(args: &[&String]) {
-    dbg!(&args);
-    let mut exit_code = 0;
+// show directory listings
+// Returns number of printed errors
+// // TODO FIXME these were &[&String] but are now &[PathBuf]
+fn list_directories(dir_args: &[&String]) -> u32 {
+    let mut errors = 0u32;
 
+    for (idx, dir_arg) in dir_args.iter().enumerate() {
+        let path = Path::new(*dir_arg);
+        let mut entries = match list_dir(&path) {
+            Ok(v) => v,
+            Err(e) => {
+                eprintln!("{}: {}", &path.to_string_lossy(), e);
+                errors += 1;
+                continue;
+            }
+        };
 
+        // entries.sort_by_key(|x| x.name.clone());
+        entries.sort_by(sort_dirs_first);
 
-
-    std::process::exit(exit_code);
-}
-
-fn show_long_listing(args: &[&String]) {
-    let mut exit_code = 0;
-
-    let mut file_printed = false;
-
-    let mut it = args.iter().peekable();
-    while let Some(arg) = it.next() {
-        let path = Path::new(arg);
-
-        if path.is_dir() {
-            if args.len() > 1 {
-                if file_printed {
-                    println!("");
-                }
-                if arg.ends_with(std::path::MAIN_SEPARATOR_STR) {
-                    println!("{}", arg);
+        // when listing multiple directories, show the directory name on top
+        if dir_args.len() > 1 {
+            if dir_arg.len() > 0 {
+                if dir_arg.chars().last().unwrap() != std::path::MAIN_SEPARATOR {
+                    println!("{}{}", dir_arg, std::path::MAIN_SEPARATOR);
                 } else {
-                    println!("{}/", arg);
+                    println!("{}", dir_arg);
                 }
             }
-            match list_dir(&path) {
-                Ok(_) => {}
-                Err(e) => {
-                    eprintln!("error: {}: {}", &arg, e);
-                    exit_code = 2;
-                }
-            }
+        }
 
-            if it.peek().is_some() {
-                println!("");
-            }
+        show_listing(&entries);
 
-            file_printed = false;
-        } else {
-            match list_file(&path) {
-                Ok(_) => {}
-                Err(e) => {
-                    eprintln!("error: {}: {}", &arg, e);
-                    exit_code = 2;
-                }
-            }
-            file_printed = true;
+        // when listing multiple directories, put a newline in between
+        if dir_args.len() > 1 && idx < dir_args.len() - 1 {
+            println!("");
         }
     }
-
-    std::process::exit(exit_code);
+    errors
 }
 
-fn list_file(path: &Path) -> Result<(), io::Error> {
-    let entry = Entry::from_path(path)?;
-    println!("{}", format_entry(&entry));
-    Ok(())
+// show listing of files given on command-line
+// Returns number of printed errors
+// // TODO FIXME these were &[&String] but are now &[PathBuf]
+fn list_files(file_args: &[&String]) -> u32 {
+    let mut errors = 0u32;
+
+    let mut entries = Vec::new();
+    for file_arg in file_args.iter() {
+        let path = Path::new(*file_arg);
+        let entry = match Entry::from_path(path) {
+            Ok(x) => x,
+            Err(e) => {
+                eprintln!("{}: {}", &path.to_string_lossy(), e);
+                errors += 1;
+                continue;
+            }
+        };
+        entries.push(entry);
+    }
+    entries.sort_by_key(|x| x.name.clone());
+    show_listing(&entries);
+
+    errors
 }
 
-fn list_dir(path: &Path) -> Result<(), io::Error> {
+fn show_listing(entries: &[Entry]) {
+    for entry in entries.iter() {
+        if ! CONFIG_ALL.get() && entry.is_hidden() {
+            continue;
+        }
+        println!("{}", format_entry(entry));
+    }
+}
+
+fn list_dir(path: &Path) -> Result<Vec<Entry>, io::Error> {
     let mut entries = Vec::new();
 
     for dir_entry in fs::read_dir(path)? {
@@ -835,30 +884,53 @@ fn list_dir(path: &Path) -> Result<(), io::Error> {
         // we don't want that ... so therefore I convert it to a custom Entry type
         // the Entry holds all the same attributes; name, metadata, linkdest (if it is a symbolic link)
         // but also (attempts) has an easier interface
-
-        // TODO any error here should skip the entry; do not return
         // Mind that the conversion may error, in which case we print the error
         // and skip this entry
 
         let entry = match dir_entry {
-            Ok(d) => Entry::from_dir_entry(&d)?,
+            Ok(d) => {
+                match Entry::from_dir_entry(&d) {
+                    Ok(x) => x,
+                    Err(err) => {
+                        // failed to read this single entry
+                        eprintln!("{}: {}", &d.path().to_string_lossy(), err);
+                        continue;
+                    }
+                }
+            },
             Err(e) => return Err(e),
         };
-
-        if ! CONFIG_ALL.get() && entry.is_hidden() {
-            continue;
-        }
-
         entries.push(entry);
     }
+    Ok(entries)
+}
 
-    entries.sort_by(sort_dirs_first);
+// Returns a vec with all arguments that are directories
+// // TODO FIXME these were &[&String] but are now &[PathBuf]
+fn collect_dir_args<'a>(args: &[&'a String]) -> Vec<&'a String> {
+    let mut v = Vec::new();
 
-    for entry in entries.iter() {
-        println!("{}", format_entry(entry));
+    for arg in args.iter() {
+        let path = Path::new(*arg);
+        if path.is_dir() {
+            v.push(*arg);
+        }
     }
+    v
+}
 
-    Ok(())
+// Returns a vec with all arguments that are files
+// // TODO FIXME these were &[&String] but are now &[PathBuf]
+fn collect_file_args<'a>(args: &[&'a String]) -> Vec<&'a String> {
+    let mut v = Vec::new();
+
+    for arg in args.iter() {
+        let path = Path::new(*arg);
+        if ! path.is_dir() {
+            v.push(*arg);
+        }
+    }
+    v
 }
 
 fn sort_dirs_first(a: &Entry, b: &Entry) -> Ordering {
