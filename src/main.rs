@@ -867,11 +867,13 @@ fn list_files(file_paths: &[PathBuf]) -> u32 {
 }
 
 fn show_listing(entries: &[Entry]) {
-    for entry in entries.iter() {
-        if ! CONFIG_ALL.get() && entry.is_hidden() {
-            continue;
-        }
-        println!("{}", format_entry(entry));
+    // show listing of all entries
+    // if not option --all, do not show hidden files
+
+    if ! CONFIG_ALL.get() {
+        entries.iter().filter(|x| ! x.is_hidden()).for_each(|x| println!("{}", format_entry(x)));
+    } else {
+        entries.iter().for_each(|x| println!("{}", format_entry(x)));
     }
 }
 
