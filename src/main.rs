@@ -734,10 +734,19 @@ fn windows_globbing(args: &[&String]) -> Vec<PathBuf> {
     let mut v = Vec::new();
 
     for arg in args.iter() {
-        for path in glob::glob(*arg).expect("error in file globbing") {
+        let mut glob_iter = glob::glob(*arg).expect("error in file globbing").peekable();
+        if glob_iter.peek().is_none() {
+            // arg is not a globbing pattern
+            // but we wish to see its dir listing anyway, so keep the path
+            v.push(PathBuf::from(*arg));
+            continue;
+        }
+        // expand all globbing
+        for path in glob_iter {
             match path {
                 Ok(path) => v.push(path),
                 Err(_) => {
+                    dbg!("I have a problem");
                     eprintln!("error in file globbing");
                     continue;
                 }
