@@ -442,7 +442,7 @@ fn classify(entry: &Entry) -> Option<char> {
                 None
             }
         }
-        FT_DIR => Some('/'),
+        FT_DIR => Some(std::path::MAIN_SEPARATOR),
         FT_SYMLINK => {
             if CONFIG_LONG.get() {
                 None
