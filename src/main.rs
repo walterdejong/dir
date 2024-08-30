@@ -11,6 +11,8 @@ use entry::Entry;
 use lazy_static::lazy_static;
 use once_cell::sync::OnceCell;
 #[cfg(unix)]
+use std::sync::Mutex;
+#[cfg(unix)]
 use std::fs::Permissions;
 use std::{
     cmp::Ordering,
