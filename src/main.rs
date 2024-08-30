@@ -13,32 +13,44 @@ use once_cell::sync::OnceCell;
 #[cfg(unix)]
 use std::fs::Permissions;
 use std::{
-    cell::Cell,
     cmp::Ordering,
     collections::HashMap,
     ffi::OsStr,
     fs::{self, File, Metadata},
     io::{self, BufReader},
     path::{Path, PathBuf},
-    sync::Mutex,
 };
 
-thread_local! {
-    static CONFIG_ALL: Cell<bool> = Cell::new(false);
-    static CONFIG_BOLD: Cell<bool> = Cell::new(true);
-    static CONFIG_CLASSIFY: Cell<bool> = Cell::new(true);
-    static CONFIG_LONG: Cell<bool> = Cell::new(true);
+struct Settings {
+    all: bool,
+    bold: bool,
+    classify: bool,
+    long: bool,
+    color_by_extension: HashMap<String, u32>,
+    color_by_filetype: Vec<u32>,
+    color_by_mode: Vec<u32>,
 }
 
-lazy_static! {
-    // hashmap: file extension -> color code
-    static ref COLOR_BY_EXT: Mutex<HashMap<String, u32>> = Mutex::new(HashMap::new());
+impl Settings {
+    #[allow(dead_code)]
+    fn new() -> Settings {
+        Default::default()
+    }
+}
 
-    // lookup table -> color code by filetype index
-    static ref COLOR_BY_FILETYPE: Mutex<Vec<u32>> = Mutex::new(vec![0;FT_MAX]);
-
-    // lookup table -> color code by file mode
-    static ref COLOR_BY_MODE: Mutex<Vec<u32>> = Mutex::new(vec![0;FM_MAX]);
+impl Default for Settings {
+    fn default() -> Settings {
+        Settings {
+            all: false,
+            bold: true,
+            classify: true,
+            long: true,
+            color_by_extension: HashMap::new(),
+            // note, color zero is 'normal'
+            color_by_filetype: vec![0; FT_MAX],
+            color_by_mode: vec![0; FM_MAX],
+        }
+    }
 }
 
 // filetype constant indices into COLOR_BY_FILETYPE
@@ -249,11 +261,11 @@ fn metadata_filetype(metadata: &Metadata) -> usize {
     FT_FILE
 }
 
-fn format_color(color: u32) -> Option<String> {
+fn format_color(color: u32, config_bold: bool) -> Option<String> {
     if color == 0 {
         None
     } else {
-        if CONFIG_BOLD.get() && color < 40 {
+        if config_bold && color < 40 {
             Some(format!("\x1b[{};1m", color))
         } else {
             Some(format!("\x1b[{}m", color))
@@ -261,81 +273,65 @@ fn format_color(color: u32) -> Option<String> {
     }
 }
 
-fn colorize(entry: &Entry) -> Option<String> {
+fn colorize(entry: &Entry, settings: &Settings) -> Option<String> {
     let filetype = metadata_filetype(&entry.metadata);
 
     if filetype == FT_DIR {
         #[cfg(unix)]
         if entry.is_sticky() {
-            let colormap = COLOR_BY_MODE
-                .lock()
-                .expect("error: failed to lock interal lookup table");
+            let colormap = &settings.color_by_mode;
             let color = colormap[FM_STICKY];
-            return format_color(color);
+            return format_color(color, settings.bold);
         }
 
-        let colormap = COLOR_BY_FILETYPE
-            .lock()
-            .expect("error: failed to lock interal lookup table");
+        let colormap = &settings.color_by_filetype;
         let color = colormap[FT_DIR];
-        return format_color(color);
+        return format_color(color, settings.bold);
     }
 
     if filetype == FT_FILE {
         #[cfg(unix)]
         if entry.is_suid() {
-            let colormap = COLOR_BY_MODE
-                .lock()
-                .expect("error: failed to lock interal lookup table");
+            let colormap = &settings.color_by_mode;
             let color = colormap[FM_SUID];
-            return format_color(color);
+            return format_color(color, settings.bold);
         }
 
         #[cfg(unix)]
         if entry.is_sgid() {
-            let colormap = COLOR_BY_MODE
-                .lock()
-                .expect("error: failed to lock interal lookup table");
+            let colormap = &settings.color_by_mode;
             let color = colormap[FM_SGID];
-            return format_color(color);
+            return format_color(color, settings.bold);
         }
 
         #[cfg(unix)]
         if entry.is_sticky() {
-            let colormap = COLOR_BY_MODE
-                .lock()
-                .expect("error: failed to lock interal lookup table");
+            let colormap = &settings.color_by_mode;
             let color = colormap[FM_STICKY];
-            return format_color(color);
+            return format_color(color, settings.bold);
         }
 
         if entry.is_exec() {
-            let colormap = COLOR_BY_MODE
-                .lock()
-                .expect("error: failed to lock interal lookup table");
+            let colormap = &settings.color_by_mode;
             let color = colormap[FM_EXEC];
-            return format_color(color);
+            return format_color(color, settings.bold);
         }
 
         // by filename extension
-        if let Some(color) = color_by_ext(&entry.name) {
-            return format_color(color);
+        if let Some(color) = color_by_ext(&entry.name, settings) {
+            return format_color(color, settings.bold);
         }
     }
 
-    let colormap = COLOR_BY_FILETYPE
-        .lock()
-        .expect("error: failed to lock interal lookup table");
+    let colormap = &settings.color_by_filetype;
     let color = colormap[filetype];
-    format_color(color)
+    format_color(color, settings.bold)
 }
 
 // Returns color code for file extension, if the file extension is known
-fn color_by_ext(filename: &OsStr) -> Option<u32> {
+fn color_by_ext(filename: &OsStr, settings: &Settings) -> Option<u32> {
     let ext = get_filename_ext(filename)?.to_lowercase();
-    let colormap = COLOR_BY_EXT
-        .lock()
-        .expect("failed to lock mutex on internal hashmap");
+    let colormap = &settings.color_by_extension;
     let color = colormap.get(&ext)?;
     Some(*color)
 }
@@ -351,7 +347,7 @@ fn get_filename_ext(filename: &OsStr) -> Option<String> {
     }
 }
 
-fn format_entry(entry: &Entry) -> String {
+fn format_entry(entry: &Entry, settings: &Settings) -> String {
     #[cfg(unix)]
     let perms_str = format_permissions(&entry.metadata.permissions());
 
@@ -370,7 +366,7 @@ fn format_entry(entry: &Entry) -> String {
         size_str = format_size(entry.metadata.len());
     }
 
-    let display_name = if let Some(color_str) = colorize(entry) {
+    let display_name = if let Some(color_str) = colorize(entry, settings) {
         // format with colors
         const END_COLOR: &'static str = "\x1b[0m";
         format!(
@@ -391,8 +387,8 @@ fn format_entry(entry: &Entry) -> String {
     #[cfg(not(unix))]
     let mut buf = format!("{}  {:>8}  {}", &time_str, &size_str, &display_name);
 
-    if CONFIG_CLASSIFY.get() {
-        if let Some(token) = classify(entry) {
+    if settings.classify {
+        if let Some(token) = classify(entry, settings) {
             buf.push(token);
         }
     }
@@ -408,8 +404,8 @@ fn format_entry(entry: &Entry) -> String {
     buf
 }
 
-fn format_wide_entry(entry: &Entry) -> String {
-    let mut buf = if let Some(color_str) = colorize(entry) {
+fn format_wide_entry(entry: &Entry, settings: &Settings) -> String {
+    let mut buf = if let Some(color_str) = colorize(entry, settings) {
         // format with colors
         const END_COLOR: &'static str = "\x1b[0m";
         format!(
@@ -422,8 +418,8 @@ fn format_wide_entry(entry: &Entry) -> String {
         entry.name.to_string_lossy().to_string()
     };
 
-    if CONFIG_CLASSIFY.get() {
-        if let Some(token) = classify(entry) {
+    if settings.classify {
+        if let Some(token) = classify(entry, settings) {
             buf.push(token);
         }
     }
@@ -431,7 +427,7 @@ fn format_wide_entry(entry: &Entry) -> String {
     buf
 }
 
-fn classify(entry: &Entry) -> Option<char> {
+fn classify(entry: &Entry, settings: &Settings) -> Option<char> {
     let filetype = metadata_filetype(&entry.metadata);
 
     match filetype {
@@ -444,7 +440,7 @@ fn classify(entry: &Entry) -> Option<char> {
         }
         FT_DIR => Some(std::path::MAIN_SEPARATOR),
         FT_SYMLINK => {
-            if CONFIG_LONG.get() {
+            if settings.long {
                 None
             } else {
                 Some('@')
@@ -456,14 +452,14 @@ fn classify(entry: &Entry) -> Option<char> {
     }
 }
 
-fn load_config() {
+fn load_config() -> Settings {
     if let Some(config_path) = dirs::config_dir() {
         let mut config_file = PathBuf::from(config_path);
         config_file.push("dir");
         config_file.push("dir.json");
 
         if !config_file.exists() {
-            return;
+            return Settings::default();
         }
 
         let f = File::open(&config_file).expect(&format!(
@@ -476,8 +472,9 @@ fn load_config() {
             config_file.to_string_lossy()
         ));
 
-        load_config_data(&data, &config_file);
+        return load_config_data(&data, &config_file);
     }
+    Settings::default()
 }
 
 // Returns color code
@@ -557,12 +554,14 @@ fn filemode_by_name(name: &str) -> Option<usize> {
     }
 }
 
-fn load_config_data(data: &serde_json::Value, config_file: &Path) {
+fn load_config_data(data: &serde_json::Value, config_file: &Path) -> Settings {
+    let mut settings = Settings::default();
+
     let mut errors = 0u32;
 
     if let Some(bold_value) = data.get("bold") {
         if let Some(bold_bool) = bold_value.as_bool() {
-            CONFIG_BOLD.set(bold_bool);
+            settings.bold = bold_bool;
         } else {
             eprintln!(
                 "{}: 'bold' should be a boolean: true or false",
@@ -573,7 +572,7 @@ fn load_config_data(data: &serde_json::Value, config_file: &Path) {
     }
     if let Some(classify_value) = data.get("classify") {
         if let Some(classify_bool) = classify_value.as_bool() {
-            CONFIG_CLASSIFY.set(classify_bool);
+            settings.classify = classify_bool;
         } else {
             eprintln!(
                 "{}: 'classify' should be a boolean: true or false",
@@ -584,29 +583,38 @@ fn load_config_data(data: &serde_json::Value, config_file: &Path) {
     }
 
     if let Some(extension_value) = data.get("extension") {
-        errors += load_config_extension(&extension_value, config_file);
+        let n_errors;
+        (settings.color_by_extension, n_errors) =
+            load_config_extension(&extension_value, config_file);
+        errors += n_errors;
     }
 
     if let Some(filetype_value) = data.get("filetype") {
-        errors += load_config_filetype(&filetype_value, config_file);
+        let n_errors;
+        (settings.color_by_filetype, n_errors) = load_config_filetype(&filetype_value, config_file);
+        errors += n_errors;
     }
 
     if let Some(mode_value) = data.get("mode") {
-        errors += load_config_filemode(&mode_value, config_file);
+        let n_errors;
+        (settings.color_by_mode, n_errors) = load_config_filemode(&mode_value, config_file);
+        errors += n_errors;
     }
 
     if errors > 0 {
         std::process::exit(2);
     }
+    settings
 }
 
-fn load_config_extension(extension_value: &serde_json::Value, config_file: &Path) -> u32 {
+fn load_config_extension(
+    extension_value: &serde_json::Value,
+    config_file: &Path,
+) -> (HashMap<String, u32>, u32) {
+    let mut color_map = HashMap::new();
     let mut errors = 0u32;
 
     if let Some(extensions) = extension_value.as_object() {
-        let mut color_map = COLOR_BY_EXT
-            .lock()
-            .expect("error: failed to lock internal hashmap");
         for (key, value) in extensions.iter() {
             if let Some(svalue) = value.as_str() {
                 if let Some(color) = color_by_name(&svalue.to_lowercase()) {
@@ -634,16 +642,14 @@ fn load_config_extension(extension_value: &serde_json::Value, config_file: &Path
         );
         errors += 1;
     }
-    errors
+    (color_map, errors)
 }
 
-fn load_config_filetype(filetype_value: &serde_json::Value, config_file: &Path) -> u32 {
+fn load_config_filetype(filetype_value: &serde_json::Value, config_file: &Path) -> (Vec<u32>, u32) {
+    let mut color_map = vec![0; FT_MAX];
     let mut errors = 0u32;
 
     if let Some(filetype) = filetype_value.as_object() {
-        let mut color_map = COLOR_BY_FILETYPE
-            .lock()
-            .expect("error: failed to lock internal lookup table");
         for (key, value) in filetype.iter() {
             if let Some(ftype) = filetype_by_name(&key.to_lowercase()) {
                 if let Some(svalue) = value.as_str() {
@@ -680,16 +686,14 @@ fn load_config_filetype(filetype_value: &serde_json::Value, config_file: &Path) 
         );
         errors += 1;
     }
-    errors
+    (color_map, errors)
 }
 
-fn load_config_filemode(mode_value: &serde_json::Value, config_file: &Path) -> u32 {
+fn load_config_filemode(mode_value: &serde_json::Value, config_file: &Path) -> (Vec<u32>, u32) {
+    let mut color_map = vec![0; FM_MAX];
     let mut errors = 0u32;
 
     if let Some(mode) = mode_value.as_object() {
-        let mut color_map = COLOR_BY_MODE
-            .lock()
-            .expect("error: failed to lock internal lookup table");
         for (key, value) in mode.iter() {
             if let Some(fmode) = filemode_by_name(&key.to_lowercase()) {
                 if let Some(svalue) = value.as_str() {
@@ -726,7 +730,7 @@ fn load_config_filemode(mode_value: &serde_json::Value, config_file: &Path) -> u
         );
         errors += 1;
     }
-    errors
+    (color_map, errors)
 }
 
 #[cfg(windows)]
@@ -791,19 +795,20 @@ fn main() {
         .collect::<Vec<_>>();
     // dbg!(&args);
 
-    load_config();
+    let mut settings = load_config();
 
     if matches.get_flag("all") {
-        CONFIG_ALL.set(true);
+        settings.all = true;
     }
     if matches.get_flag("long") {
-        CONFIG_LONG.set(true);
+        settings.long = true;
     }
     if matches.get_flag("wide") {
-        CONFIG_LONG.set(false);
+        settings.long = false;
     }
     // TODO add flag --one
     // TODO add flag --no-color
+    let settings = settings; // remove `mut`
 
     // it's easier to work with Paths, so
     // convert Vec<&String> args to Vec<PathBuf>
@@ -831,14 +836,14 @@ fn main() {
 
     let mut errors = 0;
 
-    errors += list_directories(&dir_paths);
+    errors += list_directories(&dir_paths, &settings);
 
     // when listing dirs and files, put a newline in between
     if dir_paths.len() > 0 && file_paths.len() > 0 {
         println!("");
     }
 
-    errors += list_files(&file_paths);
+    errors += list_files(&file_paths, &settings);
 
     if errors > 0 {
         std::process::exit(2);
@@ -848,7 +853,7 @@ fn main() {
 
 // show directory listings
 // Returns number of printed errors
-fn list_directories(dir_paths: &[PathBuf]) -> u32 {
+fn list_directories(dir_paths: &[PathBuf], settings: &Settings) -> u32 {
     let mut errors = 0u32;
 
     for (idx, dir_path) in dir_paths.iter().enumerate() {
@@ -874,7 +879,7 @@ fn list_directories(dir_paths: &[PathBuf]) -> u32 {
             }
         }
 
-        show_listing(&entries);
+        show_listing(&entries, &settings);
 
         // when listing multiple directories, put a newline in between
         if dir_paths.len() > 1 && idx < dir_paths.len() - 1 {
@@ -886,7 +891,7 @@ fn list_directories(dir_paths: &[PathBuf]) -> u32 {
 
 // show listing of files given on command-line
 // Returns number of printed errors
-fn list_files(file_paths: &[PathBuf]) -> u32 {
+fn list_files(file_paths: &[PathBuf], settings: &Settings) -> u32 {
     let mut errors = 0u32;
 
     let mut entries = Vec::new();
@@ -903,17 +908,17 @@ fn list_files(file_paths: &[PathBuf]) -> u32 {
         entries.push(entry);
     }
     entries.sort_by_key(|x| x.name.clone());
-    show_listing(&entries);
+    show_listing(&entries, settings);
 
     errors
 }
 
-fn show_listing(entries: &[Entry]) {
+fn show_listing(entries: &[Entry], settings: &Settings) {
     // show listing of all entries
     // if not option --long (equals --wide), show wide listing
     // if not option --all, do not show hidden files
 
-    let entries = if !CONFIG_ALL.get() {
+    let entries = if !settings.all {
         entries
             .iter()
             .filter(|x| !x.is_hidden())
@@ -922,17 +927,17 @@ fn show_listing(entries: &[Entry]) {
         entries.iter().collect::<Vec<&Entry>>()
     };
 
-    if !CONFIG_LONG.get() {
-        show_wide_listing(&entries);
+    if !settings.long {
+        show_wide_listing(&entries, settings);
         return;
     }
 
     for entry in entries {
-        println!("{}", format_entry(entry));
+        println!("{}", format_entry(entry, settings));
     }
 }
 
-fn show_wide_listing(entries: &[&Entry]) {
+fn show_wide_listing(entries: &[&Entry], settings: &Settings) {
     // print in columns
 
     if entries.is_empty() {
@@ -945,14 +950,21 @@ fn show_wide_listing(entries: &[&Entry]) {
     // (for now) we use the naive method
 
     // determine max column width
-    let mut width = entries.iter().map(|x| x.name.to_string_lossy().chars().count()).max().unwrap() + 1;
-    if CONFIG_CLASSIFY.get() {
+    let mut width = entries
+        .iter()
+        .map(|x| x.name.to_string_lossy().chars().count())
+        .max()
+        .unwrap()
+        + 1;
+    if settings.classify {
         width += 1;
     }
     let width = width;
 
     // determine terminal width
-    let term_width = if let Some((terminal_size::Width(w), terminal_size::Height(_))) = terminal_size::terminal_size() {
+    let term_width = if let Some((terminal_size::Width(w), terminal_size::Height(_))) =
+        terminal_size::terminal_size()
+    {
         w as usize
     } else {
         // note, getting the terminal size will fail when output is redirected
@@ -982,18 +994,18 @@ fn show_wide_listing(entries: &[&Entry]) {
     }
 
     // print columns
-    let column_width = if CONFIG_CLASSIFY.get() {
-        width - 1
-    } else {
-        width
-    };
+    let column_width = if settings.classify { width - 1 } else { width };
 
     for i in 0..length {
         for col in 0..num_columns {
             if let Some(entry) = columns[col][i] {
                 // use the length of onscreen text, without any color codes
                 let spacer_width = column_width - entry.name.to_string_lossy().chars().count();
-                print!("{}{:<spacer_width$}", format_wide_entry(entry), " ");
+                print!(
+                    "{}{:<spacer_width$}",
+                    format_wide_entry(entry, settings),
+                    " "
+                );
             }
         }
         println!("");
