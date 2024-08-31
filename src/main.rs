@@ -129,6 +129,39 @@ fn format_size(size: u64) -> String {
     s
 }
 
+#[cfg(windows)]
+fn format_attributes(metadata: &Metadata) -> String {
+    use std::os::windows::fs::MetadataExt;
+
+    const FILE_ATTRIBUTE_READONLY: u32 = 1;
+    const FILE_ATTRIBUTE_HIDDEN: u32 = 2;
+    const FILE_ATTRIBUTE_SYSTEM: u32 = 4;
+    // FILE_ATTRIBUTE_ARCHIVE is pretty useless; do not show
+    // the other bits are incredibly rare; do not bother
+
+    let attribs = metadata.file_attributes();
+
+    let mut s = String::with_capacity(3);
+
+    s.push(if attribs & FILE_ATTRIBUTE_READONLY != 0 {
+        'R'
+    } else {
+        ' '
+    });
+    s.push(if attribs & FILE_ATTRIBUTE_HIDDEN != 0 {
+        'H'
+    } else {
+        ' '
+    });
+    s.push(if attribs & FILE_ATTRIBUTE_SYSTEM != 0 {
+        'S'
+    } else {
+        ' '
+    });
+
+    s
+}
+
 #[allow(unused)]
 #[cfg(unix)]
 fn format_permissions(perms: &Permissions) -> String {
@@ -372,12 +405,6 @@ fn format_entry(entry: &Entry, settings: &Settings) -> String {
     #[cfg(unix)]
     let perms_str = format_permissions(&entry.metadata.permissions());
 
-    #[cfg(not(unix))]
-    {
-        // permissions not implemented for non-unix platform
-        // TODO on windows, for --all show RHS bits
-    }
-
     let time_str = format_time(&entry.mtime());
 
     let size_str;
@@ -405,7 +432,19 @@ fn format_entry(entry: &Entry, settings: &Settings) -> String {
         "{}  {}  {:>8}  {}",
         &time_str, &perms_str, &size_str, &display_name
     );
-    #[cfg(not(unix))]
+    #[cfg(windows)]
+    let mut buf = if settings.all {
+        format!(
+            "{}  {}  {:>8}  {}",
+            &time_str,
+            &format_attributes(&entry.metadata),
+            &size_str,
+            &display_name
+        )
+    } else {
+        format!("{}  {:>8}  {}", &time_str, &size_str, &display_name)
+    };
+    #[cfg(not(any(unix, windows)))]
     let mut buf = format!("{}  {:>8}  {}", &time_str, &size_str, &display_name);
 
     if let Some(token) = classify(entry, settings) {
