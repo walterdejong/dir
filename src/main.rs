@@ -30,6 +30,8 @@ struct Settings {
     classify: bool,
     long: bool,
     one: bool,
+    sort_by_time: bool,
+    sort_reverse: bool,
     color_by_extension: HashMap<String, u32>,
     color_by_filetype: Vec<u32>,
     color_by_mode: Vec<u32>,
@@ -51,6 +53,8 @@ impl Default for Settings {
             classify: true,
             long: true,
             one: false,
+            sort_by_time: false,
+            sort_reverse: false,
             color_by_extension: HashMap::new(),
             // note, color zero is 'normal'
             color_by_filetype: vec![0; FT_MAX],
@@ -818,6 +822,16 @@ fn main() {
                 .long("no-color")
                 .action(ArgAction::SetTrue)
                 .help("do not colorize output"),
+            Arg::new("time")
+                .short('t')
+                .long("time")
+                .action(ArgAction::SetTrue)
+                .help("sort by last modified time"),
+            Arg::new("reverse")
+                .short('r')
+                .long("reverse")
+                .action(ArgAction::SetTrue)
+                .help("sort in reverse order"),
             Arg::new("path").num_args(0..).default_value("."),
         ])
         .get_matches();
@@ -852,6 +866,12 @@ fn main() {
         settings.color = false;
         settings.long = true;
         settings.classify = false;
+    }
+    if matches.get_flag("time") {
+        settings.sort_by_time = true;
+    }
+    if matches.get_flag("reverse") {
+        settings.sort_reverse = true;
     }
     let settings = settings; // remove `mut`
 
@@ -911,8 +931,20 @@ fn list_directories(dir_paths: &[PathBuf], settings: &Settings) -> u32 {
             }
         };
 
-        // entries.sort_by_key(|x| x.name.clone());
-        entries.sort_by(sort_dirs_first);
+        if settings.sort_by_time {
+            if settings.sort_reverse {
+                entries.sort_by_key(|x| std::cmp::Reverse(x.mtime()))
+            } else {
+                entries.sort_by_key(|x| x.mtime());
+            }
+        } else {
+            // entries.sort_by_key(|x| x.name.clone());
+            if settings.sort_reverse {
+                entries.sort_by(|a, b| sort_dirs_first(b, a));
+            } else {
+                entries.sort_by(sort_dirs_first);
+            }
+        }
 
         // when listing multiple directories, show the directory name on top
         if dir_paths.len() > 1 {
@@ -952,7 +984,21 @@ fn list_files(file_paths: &[PathBuf], settings: &Settings) -> u32 {
         };
         entries.push(entry);
     }
-    entries.sort_by_key(|x| x.name.clone());
+
+    if settings.sort_by_time {
+        if settings.sort_reverse {
+            entries.sort_by_key(|x| std::cmp::Reverse(x.mtime()))
+        } else {
+            entries.sort_by_key(|x| x.mtime())
+        }
+    } else {
+        // sort by name
+        if settings.sort_reverse {
+            entries.sort_by_key(|x| std::cmp::Reverse(x.name.clone()));
+        } else {
+            entries.sort_by_key(|x| x.name.clone());
+        }
+    }
     show_listing(&entries, settings);
 
     errors
