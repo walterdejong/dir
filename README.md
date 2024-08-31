@@ -28,6 +28,4 @@ An example is provided.
 * Windows: `C:\Users\myname\AppData\Roaming\dir\dir.json`
 
 
-Copyright (C) 2024 by Walter de Jong <walter@heiho.net>
-
-EOB
+_Copyright (C) 2024 Walter de Jong <walter@heiho.net>_
