@@ -1063,10 +1063,10 @@ fn show_wide_listing(entries: &[&Entry], settings: &Settings) {
     // determine max column width
     let column_width = entries
         .iter()
-        .map(|x| x.name.to_string_lossy().chars().count())
+        .map(|x| display_width(*x, settings))
         .max()
         .unwrap()
-        + 3;                // + classify + margin
+        + 2;
 
     // determine terminal width
     let term_width = if let Some((terminal_size::Width(w), terminal_size::Height(_))) =
