@@ -1050,23 +1050,79 @@ fn show_listing(entries: &[Entry], settings: &Settings) {
 
 fn show_wide_listing(entries: &[&Entry], settings: &Settings) {
     // print in columns
+    // we have variable column widths
 
     if entries.is_empty() {
         return;
     }
 
-    // Windows `dir` does a naive column max width, where each column has the same width
-    // GNU `ls` does a funny puzzle where it has variable column widths,
-    // enabling it to cram more columns onto the screen
-    // (for now) we use the naive method
+    let column_widths = determine_column_widths(entries, settings);
+    // dbg!(&column_widths);
 
-    // determine max column width
-    let column_width = entries
-        .iter()
-        .map(|x| display_width(*x, settings))
-        .max()
-        .unwrap()
-        + 2;
+    // print entries
+
+    let mut num_lines = entries.len() / column_widths.len();
+    if entries.len() % column_widths.len() != 0 {
+        num_lines += 1;
+    }
+    let num_lines = num_lines; // remove mut
+
+    for line in 0..num_lines {
+        let mut col = 0;
+        let mut i = line;
+
+        loop {
+            let entry = entries[i];
+
+            let column_width = column_widths[col];
+            col += 1;
+
+            print!("{}", format_wide_entry(entry, settings));
+
+            i += num_lines;
+            if i >= entries.len() {
+                break;
+            }
+            if col >= column_widths.len() || column_widths[col] == 0 {
+                break;
+            }
+
+            let spacer = column_width - display_width(entry, settings);
+            if spacer > 0 {
+                print!("{:<spacer$}", " ");
+            }
+        }
+        println!("");
+    }
+}
+
+#[derive(Debug)]
+struct ColumnInfo {
+    valid: bool,
+    line_length: usize,
+    column_widths: Vec<usize>,
+}
+
+impl ColumnInfo {
+    fn new() -> ColumnInfo {
+        ColumnInfo {
+            valid: true,
+            line_length: 0,
+            column_widths: Vec::new(),
+        }
+    }
+}
+
+// Returns vec of column widths
+fn determine_column_widths(entries: &[&Entry], settings: &Settings) -> Vec<usize> {
+    /*
+        The procedure used here to determine the variable column widths
+        is the same as what GNU coreutils `ls` does
+        which is try to fit filenames in columns, while checking the line length
+        If the line length goes over the terminal width, then that's invalid;
+        you can't have as many columns
+        If it does fit, try fitting the next file
+    */
 
     // determine terminal width
     let term_width = if let Some((terminal_size::Width(w), terminal_size::Height(_))) =
@@ -1078,45 +1134,70 @@ fn show_wide_listing(entries: &[&Entry], settings: &Settings) {
         80usize
     };
 
-    let mut num_columns = term_width / column_width;
-    if num_columns <= 0 {
-        num_columns = 1;
+    const SPACER: usize = 2;
+    const MIN_WIDTH: usize = 1 + SPACER;
+
+    // number of possible columns
+    let mut num_possible = std::cmp::min(term_width / MIN_WIDTH, entries.len());
+    if num_possible < 1 {
+        num_possible = 1;
     }
-    let num_columns = num_columns;          // remove mut
-
-    // make columns vector of vectors
-    let length = (entries.len() + num_columns - 1) / num_columns;
-    const NONE: Option<&Entry> = None;
-    let mut columns = vec![vec![NONE; length]; num_columns];
-    let mut i = 0usize;
-    let mut col = 0usize;
-
-    // fill the columns with entry refs
-    for entry in entries {
-        columns[col][i] = Some(*entry);
-        i += 1;
-        if i >= length {
-            i = 0;
-            col += 1;
-        }
+    let num_possible = num_possible; // remove mut
+    dbg!(&num_possible);
+    let mut column_info = Vec::<ColumnInfo>::with_capacity(num_possible);
+    /*
+        make a triangular data structure;
+        column_info[0] has 1 column widths
+        column_info[1] has 2 column widths
+        column_info[2] has 3 column widths
+        and so on
+    */
+    for u in 0..num_possible {
+        column_info.push(ColumnInfo::new());
+        column_info
+            .last_mut()
+            .expect("failed to allocate column structure")
+            .column_widths = vec![0; u + 1];
     }
 
-    // print columns
+    // determine column widths by fitting entries in
 
-    for i in 0..length {
-        for col in 0..num_columns {
-            if let Some(entry) = columns[col][i] {
-                // use the length of onscreen text, without any color codes
-                let spacer_width = column_width - display_width(entry, settings);
-                print!(
-                    "{}{:<spacer_width$}",
-                    format_wide_entry(entry, settings),
-                    " "
-                );
+    for (n, entry) in entries.iter().enumerate() {
+        for i in 0..num_possible {
+            if !column_info[i].valid {
+                continue;
+            }
+            let col = n / ((entries.len() + i) / (i + 1));
+            let mut width = display_width(*entry, settings);
+            if col != i {
+                width += SPACER;
+            }
+            let width = width; // remove mut
+
+            if width >= column_info[i].column_widths[col] {
+                // filename is longer than the column's width;
+                // column needs adjusting
+                let old_column_width = column_info[i].column_widths[col];
+                column_info[i].column_widths[col] = width;
+                column_info[i].line_length += width - old_column_width;
+                // does it still fit onscreen?
+                column_info[i].valid = column_info[i].line_length < term_width;
             }
         }
-        println!("");
     }
+
+    // the highest number of columns is the one that is valid
+    let mut col = 0;
+    for i in (0..num_possible).rev() {
+        if column_info[i].valid {
+            col = i;
+            break;
+        }
+    }
+    // return column widths
+    // NOTE the vec of columns may be larger than the actual number of columns
+    // displayed onscreen; the rightmost columns may have width zero
+    column_info[col].column_widths.clone()
 }
 
 // Returns width of filename on screen
