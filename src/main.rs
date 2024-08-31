@@ -6,7 +6,7 @@
 pub mod entry;
 
 use chrono::{DateTime, Datelike, Local};
-use clap::{Arg, ArgAction, Command};
+use clap::{Arg, ArgAction, ColorChoice, Command};
 use entry::Entry;
 use lazy_static::lazy_static;
 use once_cell::sync::OnceCell;
@@ -791,6 +791,7 @@ fn main() {
         .version("0.1.0")
         .author("Walter de Jong <walter@heiho.net>")
         .about("Show directory listing")
+        .color(ColorChoice::Never)
         .args([
             Arg::new("all")
                 .short('a')
