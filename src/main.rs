@@ -408,10 +408,8 @@ fn format_entry(entry: &Entry, settings: &Settings) -> String {
     #[cfg(not(unix))]
     let mut buf = format!("{}  {:>8}  {}", &time_str, &size_str, &display_name);
 
-    if settings.classify {
-        if let Some(token) = classify(entry, settings) {
-            buf.push(token);
-        }
+    if let Some(token) = classify(entry, settings) {
+        buf.push(token);
     }
 
     if entry.metadata.is_symlink() {
@@ -438,17 +436,17 @@ fn format_wide_entry(entry: &Entry, settings: &Settings) -> String {
     } else {
         entry.name.to_string_lossy().to_string()
     };
-
-    if settings.classify {
-        if let Some(token) = classify(entry, settings) {
-            buf.push(token);
-        }
+    if let Some(token) = classify(entry, settings) {
+        buf.push(token);
     }
-
     buf
 }
 
 fn classify(entry: &Entry, settings: &Settings) -> Option<char> {
+    if !settings.classify {
+        return None;
+    }
+
     let filetype = metadata_filetype(&entry.metadata);
 
     match filetype {
@@ -1063,16 +1061,12 @@ fn show_wide_listing(entries: &[&Entry], settings: &Settings) {
     // (for now) we use the naive method
 
     // determine max column width
-    let mut width = entries
+    let column_width = entries
         .iter()
         .map(|x| x.name.to_string_lossy().chars().count())
         .max()
         .unwrap()
-        + 1;
-    if settings.classify {
-        width += 1;
-    }
-    let width = width;
+        + 3;                // + classify + margin
 
     // determine terminal width
     let term_width = if let Some((terminal_size::Width(w), terminal_size::Height(_))) =
@@ -1084,10 +1078,11 @@ fn show_wide_listing(entries: &[&Entry], settings: &Settings) {
         80usize
     };
 
-    let mut num_columns = term_width / width;
+    let mut num_columns = term_width / column_width;
     if num_columns <= 0 {
         num_columns = 1;
     }
+    let num_columns = num_columns;          // remove mut
 
     // make columns vector of vectors
     let length = (entries.len() + num_columns - 1) / num_columns;
@@ -1107,13 +1102,17 @@ fn show_wide_listing(entries: &[&Entry], settings: &Settings) {
     }
 
     // print columns
-    let column_width = if settings.classify { width - 1 } else { width };
 
     for i in 0..length {
         for col in 0..num_columns {
             if let Some(entry) = columns[col][i] {
                 // use the length of onscreen text, without any color codes
-                let spacer_width = column_width - entry.name.to_string_lossy().chars().count();
+                let mut spacer_width = column_width - entry.name.to_string_lossy().chars().count();
+                if let Some(_) = classify(entry, settings) {
+                    if spacer_width > 0 {
+                        spacer_width -= 1;
+                    }
+                }
                 print!(
                     "{}{:<spacer_width$}",
                     format_wide_entry(entry, settings),
