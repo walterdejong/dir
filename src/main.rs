@@ -30,6 +30,7 @@ struct Settings {
     classify: bool,
     long: bool,
     one: bool,
+    sort_by_size: bool,
     sort_by_time: bool,
     sort_reverse: bool,
     color_by_extension: HashMap<String, u32>,
@@ -53,6 +54,7 @@ impl Default for Settings {
             classify: true,
             long: true,
             one: false,
+            sort_by_size: false,
             sort_by_time: false,
             sort_reverse: false,
             color_by_extension: HashMap::new(),
@@ -822,6 +824,11 @@ fn main() {
                 .long("no-color")
                 .action(ArgAction::SetTrue)
                 .help("do not colorize output"),
+            Arg::new("size")
+                .short('s')
+                .long("size")
+                .action(ArgAction::SetTrue)
+                .help("sort by file size"),
             Arg::new("time")
                 .short('t')
                 .long("time")
@@ -866,6 +873,9 @@ fn main() {
         settings.color = false;
         settings.long = true;
         settings.classify = false;
+    }
+    if matches.get_flag("size") {
+        settings.sort_by_size = true;
     }
     if matches.get_flag("time") {
         settings.sort_by_time = true;
@@ -931,7 +941,13 @@ fn list_directories(dir_paths: &[PathBuf], settings: &Settings) -> u32 {
             }
         };
 
-        if settings.sort_by_time {
+        if settings.sort_by_size {
+            if settings.sort_reverse {
+                entries.sort_by_key(|x| std::cmp::Reverse(x.metadata.len()))
+            } else {
+                entries.sort_by_key(|x| x.metadata.len());
+            }
+        } else if settings.sort_by_time {
             if settings.sort_reverse {
                 entries.sort_by_key(|x| std::cmp::Reverse(x.mtime()))
             } else {
@@ -985,7 +1001,13 @@ fn list_files(file_paths: &[PathBuf], settings: &Settings) -> u32 {
         entries.push(entry);
     }
 
-    if settings.sort_by_time {
+    if settings.sort_by_size {
+        if settings.sort_reverse {
+            entries.sort_by_key(|x| std::cmp::Reverse(x.metadata.len()))
+        } else {
+            entries.sort_by_key(|x| x.metadata.len());
+        }
+    } else if settings.sort_by_time {
         if settings.sort_reverse {
             entries.sort_by_key(|x| std::cmp::Reverse(x.mtime()))
         } else {
