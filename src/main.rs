@@ -28,6 +28,7 @@ struct Settings {
     bold: bool,
     classify: bool,
     long: bool,
+    one: bool,
     color_by_extension: HashMap<String, u32>,
     color_by_filetype: Vec<u32>,
     color_by_mode: Vec<u32>,
@@ -47,6 +48,7 @@ impl Default for Settings {
             bold: true,
             classify: true,
             long: true,
+            one: false,
             color_by_extension: HashMap::new(),
             // note, color zero is 'normal'
             color_by_filetype: vec![0; FT_MAX],
@@ -350,6 +352,11 @@ fn get_filename_ext(filename: &OsStr) -> Option<String> {
 }
 
 fn format_entry(entry: &Entry, settings: &Settings) -> String {
+    if settings.one {
+        // show only the name
+        return entry.name.to_string_lossy().to_string();
+    }
+
     #[cfg(unix)]
     let perms_str = format_permissions(&entry.metadata.permissions());
 
@@ -783,6 +790,11 @@ fn main() {
                 .long("wide")
                 .action(ArgAction::SetTrue)
                 .help("show listing in columns without details"),
+            Arg::new("one")
+                .short('1')
+                .long("one")
+                .action(ArgAction::SetTrue)
+                .help("show only names in one column without details"),
             Arg::new("path").num_args(0..).default_value("."),
         ])
         .get_matches();
@@ -808,7 +820,12 @@ fn main() {
     if matches.get_flag("wide") {
         settings.long = false;
     }
-    // TODO add flag --one
+    if matches.get_flag("one") {
+        settings.one = true;
+        // this also implies these flags;
+        settings.long = true;
+        settings.classify = false;
+    }
     // TODO add flag --no-color
     let settings = settings; // remove `mut`
 
