@@ -11,9 +11,9 @@ use entry::Entry;
 use lazy_static::lazy_static;
 use once_cell::sync::OnceCell;
 #[cfg(unix)]
-use std::sync::Mutex;
-#[cfg(unix)]
 use std::fs::Permissions;
+#[cfg(unix)]
+use std::sync::Mutex;
 use std::{
     cmp::Ordering,
     collections::HashMap,
@@ -24,8 +24,9 @@ use std::{
 };
 
 struct Settings {
-    all: bool,
+    color: bool,
     bold: bool,
+    all: bool,
     classify: bool,
     long: bool,
     one: bool,
@@ -44,8 +45,9 @@ impl Settings {
 impl Default for Settings {
     fn default() -> Settings {
         Settings {
-            all: false,
+            color: true,
             bold: true,
+            all: false,
             classify: true,
             long: true,
             one: false,
@@ -278,6 +280,10 @@ fn format_color(color: u32, config_bold: bool) -> Option<String> {
 }
 
 fn colorize(entry: &Entry, settings: &Settings) -> Option<String> {
+    if !settings.color {
+        return None;
+    }
+
     let filetype = metadata_filetype(&entry.metadata);
 
     if filetype == FT_DIR {
@@ -568,6 +574,17 @@ fn load_config_data(data: &serde_json::Value, config_file: &Path) -> Settings {
 
     let mut errors = 0u32;
 
+    if let Some(color_value) = data.get("color") {
+        if let Some(color_bool) = color_value.as_bool() {
+            settings.color = color_bool;
+        } else {
+            eprintln!(
+                "{}: 'color' should be a boolean: true or false",
+                config_file.to_string_lossy()
+            );
+            errors += 1;
+        }
+    }
     if let Some(bold_value) = data.get("bold") {
         if let Some(bold_bool) = bold_value.as_bool() {
             settings.bold = bold_bool;
@@ -795,6 +812,10 @@ fn main() {
                 .long("one")
                 .action(ArgAction::SetTrue)
                 .help("show only names in one column without details"),
+            Arg::new("no-color")
+                .long("no-color")
+                .action(ArgAction::SetTrue)
+                .help("do not colorize output"),
             Arg::new("path").num_args(0..).default_value("."),
         ])
         .get_matches();
@@ -820,13 +841,16 @@ fn main() {
     if matches.get_flag("wide") {
         settings.long = false;
     }
+    if matches.get_flag("no-color") {
+        settings.color = false;
+    }
     if matches.get_flag("one") {
         settings.one = true;
         // this also implies these flags;
+        settings.color = false;
         settings.long = true;
         settings.classify = false;
     }
-    // TODO add flag --no-color
     let settings = settings; // remove `mut`
 
     // it's easier to work with Paths, so

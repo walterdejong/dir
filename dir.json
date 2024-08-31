@@ -1,4 +1,5 @@
 {
+    "color": true,
     "bold": true,
     "classify": true,
     "filetype": {
