@@ -1107,12 +1107,7 @@ fn show_wide_listing(entries: &[&Entry], settings: &Settings) {
         for col in 0..num_columns {
             if let Some(entry) = columns[col][i] {
                 // use the length of onscreen text, without any color codes
-                let mut spacer_width = column_width - entry.name.to_string_lossy().chars().count();
-                if let Some(_) = classify(entry, settings) {
-                    if spacer_width > 0 {
-                        spacer_width -= 1;
-                    }
-                }
+                let spacer_width = column_width - display_width(entry, settings);
                 print!(
                     "{}{:<spacer_width$}",
                     format_wide_entry(entry, settings),
@@ -1122,6 +1117,15 @@ fn show_wide_listing(entries: &[&Entry], settings: &Settings) {
         }
         println!("");
     }
+}
+
+// Returns width of filename on screen
+fn display_width(entry: &Entry, settings: &Settings) -> usize {
+    let mut width = entry.name.to_string_lossy().chars().count();
+    if let Some(_) = classify(entry, settings) {
+        width += 1;
+    }
+    width
 }
 
 fn list_dir(path: &Path) -> Result<Vec<Entry>, io::Error> {
