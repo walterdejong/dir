@@ -1217,7 +1217,7 @@ fn determine_column_widths(entries: &[&Entry], settings: &Settings) -> Vec<usize
         column_info.push(ColumnInfo::new());
         column_info
             .last_mut()
-            .expect("failed to allocate column structure")
+            .expect("unexpected memory error")
             .column_widths = vec![0; u + 1];
     }
 
