@@ -844,11 +844,6 @@ fn main() {
                 .long("all")
                 .action(ArgAction::SetTrue)
                 .help("show all, including hidden"),
-            Arg::new("long")
-                .short('l')
-                .long("long")
-                .action(ArgAction::SetTrue)
-                .help("show long listing with details"),
             Arg::new("wide")
                 .short('w')
                 .long("wide")
@@ -902,9 +897,6 @@ fn main() {
 
     if matches.get_flag("all") {
         settings.all = true;
-    }
-    if matches.get_flag("long") {
-        settings.long = true;
     }
     if matches.get_flag("wide") {
         settings.long = false;
