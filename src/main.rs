@@ -875,8 +875,8 @@ fn main() {
                 .help("sort by last modified time"),
             Arg::new("extension")
                 .short('X')
-                .long("ext")
                 .long("extension")
+                .visible_alias("ext")
                 .action(ArgAction::SetTrue)
                 .help("sort by extension"),
             Arg::new("reverse")
