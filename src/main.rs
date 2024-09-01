@@ -978,26 +978,7 @@ fn list_directories(dir_paths: &[PathBuf], settings: &Settings) -> u32 {
             }
         };
 
-        if settings.sort_by_size {
-            if settings.sort_reverse {
-                entries.sort_by_key(|x| std::cmp::Reverse(x.metadata.len()))
-            } else {
-                entries.sort_by_key(|x| x.metadata.len());
-            }
-        } else if settings.sort_by_time {
-            if settings.sort_reverse {
-                entries.sort_by_key(|x| std::cmp::Reverse(x.mtime()))
-            } else {
-                entries.sort_by_key(|x| x.mtime());
-            }
-        } else {
-            // entries.sort_by_key(|x| x.name.clone());
-            if settings.sort_reverse {
-                entries.sort_by(|a, b| sort_dirs_first(b, a));
-            } else {
-                entries.sort_by(sort_dirs_first);
-            }
-        }
+        sort_entries(&mut entries, settings);
 
         // when listing multiple directories, show the directory name on top
         if dir_paths.len() > 1 {
@@ -1038,6 +1019,14 @@ fn list_files(file_paths: &[PathBuf], settings: &Settings) -> u32 {
         entries.push(entry);
     }
 
+    sort_entries(&mut entries, settings);
+    show_listing(&entries, settings);
+
+    errors
+}
+
+// sort entries in-place
+fn sort_entries(entries: &mut [Entry], settings: &Settings) {
     if settings.sort_by_size {
         if settings.sort_reverse {
             entries.sort_by_key(|x| std::cmp::Reverse(x.metadata.len()))
@@ -1051,16 +1040,30 @@ fn list_files(file_paths: &[PathBuf], settings: &Settings) -> u32 {
             entries.sort_by_key(|x| x.mtime())
         }
     } else {
-        // sort by name
+        // sort by name, directories first
         if settings.sort_reverse {
-            entries.sort_by_key(|x| std::cmp::Reverse(x.name.clone()));
+            entries.sort_by(|a, b| sort_dirs_first(b, a));
         } else {
-            entries.sort_by_key(|x| x.name.clone());
+            entries.sort_by(sort_dirs_first);
         }
     }
-    show_listing(&entries, settings);
+}
 
-    errors
+fn sort_dirs_first(a: &Entry, b: &Entry) -> Ordering {
+    if a.metadata.is_dir() {
+        if b.metadata.is_dir() {
+            a.name.cmp(&b.name)
+        } else {
+            Ordering::Less
+        }
+    } else {
+        // a is a file or something else, but not a directory
+        if b.metadata.is_dir() {
+            Ordering::Greater
+        } else {
+            a.name.cmp(&b.name)
+        }
+    }
 }
 
 fn show_listing(entries: &[Entry], settings: &Settings) {
@@ -1288,23 +1291,6 @@ fn list_dir(path: &Path) -> Result<Vec<Entry>, io::Error> {
         entries.push(entry);
     }
     Ok(entries)
-}
-
-fn sort_dirs_first(a: &Entry, b: &Entry) -> Ordering {
-    if a.metadata.is_dir() {
-        if b.metadata.is_dir() {
-            a.name.cmp(&b.name)
-        } else {
-            Ordering::Less
-        }
-    } else {
-        // a is a file or something else, but not a directory
-        if b.metadata.is_dir() {
-            Ordering::Greater
-        } else {
-            a.name.cmp(&b.name)
-        }
-    }
 }
 
 // EOB
