@@ -834,7 +834,7 @@ fn windows_globbing(args: &[&String]) -> Vec<PathBuf> {
 fn main() {
     let matches = Command::new("dir")
         .color(ColorChoice::Never)
-        .version("0.1.0")
+        .version("0.9.0")
         .author("Walter de Jong <walter@heiho.net>")
         .about("Show directory listing")
         .after_help("Copyright (C) 2024 Walter de Jong <walter@heiho.net>")
@@ -1067,6 +1067,11 @@ fn sort_entries(entries: &mut [Entry], settings: &Settings) {
 }
 
 fn sorter_fn_extension(a: &Entry, b: &Entry) -> Ordering {
+    if a.metadata.is_dir() || b.metadata.is_dir() {
+        // do not treat dots in directory names as file extension
+        return sorter_dirs_first(a, b);
+    }
+
     if let Some(a_ext) = get_filename_ext(&a.name) {
         let a_lower_ext = a_ext.to_lowercase();
         if let Some(b_ext) = get_filename_ext(&b.name) {
