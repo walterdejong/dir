@@ -362,14 +362,14 @@ fn colorize(entry: &Entry, settings: &Settings) -> Option<String> {
             return format_color(color, settings.bold);
         }
 
-        if entry.is_exec() {
-            let colormap = &settings.color_by_mode;
-            let color = colormap[FM_EXEC];
+        // by filename extension
+        if let Some(color) = color_by_ext(&entry.name, settings) {
             return format_color(color, settings.bold);
         }
 
-        // by filename extension
-        if let Some(color) = color_by_ext(&entry.name, settings) {
+        if entry.is_exec() {
+            let colormap = &settings.color_by_mode;
+            let color = colormap[FM_EXEC];
             return format_color(color, settings.bold);
         }
     }
