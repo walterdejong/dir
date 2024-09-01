@@ -819,7 +819,7 @@ fn windows_globbing(args: &[&String]) -> Vec<PathBuf> {
             match path {
                 Ok(path) => v.push(path),
                 Err(_) => {
-                    dbg!("I have a problem");
+                    // dbg!("I have a problem");
                     eprintln!("error in file globbing");
                     continue;
                 }
@@ -1143,6 +1143,8 @@ struct ColumnInfo {
 }
 
 impl ColumnInfo {
+    const SPACER: usize = 2;
+
     fn new() -> ColumnInfo {
         ColumnInfo {
             valid: true,
@@ -1150,6 +1152,26 @@ impl ColumnInfo {
             column_widths: Vec::new(),
         }
     }
+}
+
+// Returns width of filename on screen
+fn display_width(entry: &Entry, settings: &Settings) -> usize {
+    let mut width = entry.name.to_string_lossy().chars().count();
+    if let Some(_) = classify(entry, settings) {
+        width += 1;
+    }
+    width
+}
+
+// Returns minimum column width of all entries
+fn determine_min_column_width(entries: &[&Entry], settings: &Settings, term_width: usize) -> usize {
+    let mut min_width = term_width;
+
+    for entry in entries.iter() {
+        let w = display_width(*entry, settings);
+        min_width = std::cmp::min(min_width, w + ColumnInfo::SPACER);
+    }
+    min_width
 }
 
 // Returns vec of column widths
@@ -1173,16 +1195,16 @@ fn determine_column_widths(entries: &[&Entry], settings: &Settings) -> Vec<usize
         80usize
     };
 
-    const SPACER: usize = 2;
-    const MIN_WIDTH: usize = 1 + SPACER;
+    if entries.len() <= 1 {
+        return vec![term_width];
+    }
 
     // number of possible columns
-    let mut num_possible = std::cmp::min(term_width / MIN_WIDTH, entries.len());
-    if num_possible < 1 {
-        num_possible = 1;
+    let min_width = determine_min_column_width(entries, settings, term_width);
+    let num_possible = term_width / min_width;
+    if num_possible <= 1 {
+        return vec![term_width];
     }
-    let num_possible = num_possible; // remove mut
-    dbg!(&num_possible);
     let mut column_info = Vec::<ColumnInfo>::with_capacity(num_possible);
     /*
         make a triangular data structure;
@@ -1209,7 +1231,7 @@ fn determine_column_widths(entries: &[&Entry], settings: &Settings) -> Vec<usize
             let col = n / ((entries.len() + i) / (i + 1));
             let mut width = display_width(*entry, settings);
             if col != i {
-                width += SPACER;
+                width += ColumnInfo::SPACER;
             }
             let width = width; // remove mut
 
@@ -1237,15 +1259,6 @@ fn determine_column_widths(entries: &[&Entry], settings: &Settings) -> Vec<usize
     // NOTE the vec of columns may be larger than the actual number of columns
     // displayed onscreen; the rightmost columns may have width zero
     column_info[col].column_widths.clone()
-}
-
-// Returns width of filename on screen
-fn display_width(entry: &Entry, settings: &Settings) -> usize {
-    let mut width = entry.name.to_string_lossy().chars().count();
-    if let Some(_) = classify(entry, settings) {
-        width += 1;
-    }
-    width
 }
 
 fn list_dir(path: &Path) -> Result<Vec<Entry>, io::Error> {
