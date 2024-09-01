@@ -11,11 +11,13 @@ entirely to call the correct binary.
 Example output:
 
 ```
-    Aug 24 13:32  drwxrwxr-x   <DIR>    src/
-    Aug 15 17:10  drwxrwxr-x   <DIR>    target/
-    Aug 24 16:42  -rw-rw-r--   17.4 kB  Cargo.lock
-    Aug 24 16:42  -rw-rw-r--       188  Cargo.toml
-    Aug 24 18:34  -rw-rw-r--       446  README.md
+    Aug 31 20:12  drwxr-xr-x   <DIR>    src/
+    Aug 15 19:31  drwxr-xr-x   <DIR>    target/
+    Aug 25 22:10  -rw-r--r--   18.4 kB  Cargo.lock
+    Aug 25 22:10  -rw-r--r--       210  Cargo.toml
+    Aug 31 20:12  -rw-r--r--    1.1 kB  dir.json
+    Sep 01 15:00  -rw-r--r--    1.1 kB  LICENSE
+    Sep 01 15:09  -rw-r--r--       891  README.md
 ```
 
 The UNIX permission bits are not shown on Windows.
