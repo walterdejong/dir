@@ -1068,8 +1068,10 @@ fn sort_entries(entries: &mut [Entry], settings: &Settings) {
 
 fn sorter_fn_extension(a: &Entry, b: &Entry) -> Ordering {
     if let Some(a_ext) = get_filename_ext(&a.name) {
+        let a_lower_ext = a_ext.to_lowercase();
         if let Some(b_ext) = get_filename_ext(&b.name) {
-            let order = a_ext.cmp(&b_ext);
+            let b_lower_ext = b_ext.to_lowercase();
+            let order = a_lower_ext.cmp(&b_lower_ext);
             if order == Ordering::Equal {
                 return sorter_dirs_first(a, b);
             }
@@ -1091,7 +1093,9 @@ fn sorter_fn_extension(a: &Entry, b: &Entry) -> Ordering {
 fn sorter_dirs_first(a: &Entry, b: &Entry) -> Ordering {
     if a.metadata.is_dir() {
         if b.metadata.is_dir() {
-            a.name.cmp(&b.name)
+            let a_lower = a.name.to_string_lossy().to_lowercase();
+            let b_lower = b.name.to_string_lossy().to_lowercase();
+            a_lower.cmp(&b_lower)
         } else {
             Ordering::Less
         }
@@ -1100,7 +1104,9 @@ fn sorter_dirs_first(a: &Entry, b: &Entry) -> Ordering {
         if b.metadata.is_dir() {
             Ordering::Greater
         } else {
-            a.name.cmp(&b.name)
+            let a_lower = a.name.to_string_lossy().to_lowercase();
+            let b_lower = b.name.to_string_lossy().to_lowercase();
+            a_lower.cmp(&b_lower)
         }
     }
 }
