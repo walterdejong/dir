@@ -985,11 +985,11 @@ fn list_directories(dir_paths: &[PathBuf], settings: &Settings) -> u32 {
 
         // when listing multiple directories, show the directory name on top
         if dir_paths.len() > 1 {
-            let path = dir_path.as_path();
+            let path = dir_path.as_path().to_string_lossy();
             if path.ends_with(std::path::MAIN_SEPARATOR_STR) {
-                println!("{}", &path.to_string_lossy());
+                println!("{}", &path);
             } else {
-                println!("{}{}", &path.to_string_lossy(), std::path::MAIN_SEPARATOR);
+                println!("{}{}", &path, std::path::MAIN_SEPARATOR);
             }
         }
 
