@@ -32,6 +32,7 @@ struct Settings {
     one: bool,
     sort_by_size: bool,
     sort_by_time: bool,
+    sort_by_extension: bool,
     sort_reverse: bool,
     color_by_extension: HashMap<String, u32>,
     color_by_filetype: Vec<u32>,
@@ -56,6 +57,7 @@ impl Default for Settings {
             one: false,
             sort_by_size: false,
             sort_by_time: false,
+            sort_by_extension: false,
             sort_reverse: false,
             color_by_extension: HashMap::new(),
             // note, color zero is 'normal'
@@ -871,6 +873,12 @@ fn main() {
                 .long("time")
                 .action(ArgAction::SetTrue)
                 .help("sort by last modified time"),
+            Arg::new("extension")
+                .short('X')
+                .long("ext")
+                .long("extension")
+                .action(ArgAction::SetTrue)
+                .help("sort by extension"),
             Arg::new("reverse")
                 .short('r')
                 .long("reverse")
@@ -916,6 +924,9 @@ fn main() {
     }
     if matches.get_flag("time") {
         settings.sort_by_time = true;
+    }
+    if matches.get_flag("extension") {
+        settings.sort_by_extension = true;
     }
     if matches.get_flag("reverse") {
         settings.sort_reverse = true;
@@ -1039,17 +1050,45 @@ fn sort_entries(entries: &mut [Entry], settings: &Settings) {
         } else {
             entries.sort_by_key(|x| x.mtime())
         }
+    } else if settings.sort_by_extension {
+        if settings.sort_reverse {
+            entries.sort_by(|a, b| sorter_fn_extension(b, a));
+        } else {
+            entries.sort_by(sorter_fn_extension);
+        }
     } else {
         // sort by name, directories first
         if settings.sort_reverse {
-            entries.sort_by(|a, b| sort_dirs_first(b, a));
+            entries.sort_by(|a, b| sorter_dirs_first(b, a));
         } else {
-            entries.sort_by(sort_dirs_first);
+            entries.sort_by(sorter_dirs_first);
         }
     }
 }
 
-fn sort_dirs_first(a: &Entry, b: &Entry) -> Ordering {
+fn sorter_fn_extension(a: &Entry, b: &Entry) -> Ordering {
+    if let Some(a_ext) = get_filename_ext(&a.name) {
+        if let Some(b_ext) = get_filename_ext(&b.name) {
+            let order = a_ext.cmp(&b_ext);
+            if order == Ordering::Equal {
+                return sorter_dirs_first(a, b);
+            }
+            return order;
+        } else {
+            // b_ext is None; a > b
+            return Ordering::Greater;
+        }
+    } else {
+        if let Some(_) = get_filename_ext(&b.name) {
+            // a_ext is None; a < b
+            return Ordering::Less;
+        }
+        // else both None
+    }
+    sorter_dirs_first(a, b)
+}
+
+fn sorter_dirs_first(a: &Entry, b: &Entry) -> Ordering {
     if a.metadata.is_dir() {
         if b.metadata.is_dir() {
             a.name.cmp(&b.name)
