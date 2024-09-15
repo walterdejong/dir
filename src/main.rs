@@ -834,7 +834,7 @@ fn windows_globbing(args: &[&String]) -> Vec<PathBuf> {
 fn main() {
     let matches = Command::new("dir")
         .color(ColorChoice::Never)
-        .version("0.9.0")
+        .version(env!("CARGO_PKG_VERSION"))
         .author("Walter de Jong <walter@heiho.net>")
         .about("Show directory listing")
         .after_help("Copyright (C) 2024 Walter de Jong <walter@heiho.net>")
