@@ -89,7 +89,7 @@ impl Entry {
         }
     }
 
-    #[cfg(unix)]
+    #[cfg(all(unix, not(target_os = "macos")))]
     pub fn is_hidden(&self) -> bool {
         // sucks that we have to convert this entire thing just to look at one first character
         let s = self.name.to_string_lossy();
@@ -98,6 +98,27 @@ impl Entry {
             .next()
             .expect("panic: this should not have happened");
         first == '.'
+    }
+
+    #[cfg(target_os = "macos")]
+    pub fn is_hidden(&self) -> bool {
+        // like UNIX, file is hidden if name starts with a dot
+        let s = self.name.to_string_lossy();
+        let first = s
+            .chars()
+            .next()
+            .expect("panic: this should not have happened");
+        if first == '.' {
+            return true;
+        }
+
+        // macOS file is hidden if the UF_HIDDEN flag is set
+        use std::os::macos::fs::MetadataExt;
+        let flags = self.metadata.st_flags();
+
+        const UF_HIDDEN: u32 = 0x8000;
+
+        flags & UF_HIDDEN == UF_HIDDEN
     }
 
     #[cfg(windows)]
